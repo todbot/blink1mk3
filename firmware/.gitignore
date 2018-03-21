@@ -50,3 +50,4 @@ gcc-arm-none-eabi-5_4-2016q2
 
 # Patched linker file
 tomu.ld
+tomu-nobootloader.ld

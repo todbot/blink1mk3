@@ -1,10 +1,11 @@
-# tomu-samples
+# blink1mk3 firmware
 
-## What are these:
+## What is this:
 
-These projects are simple programs for the [Tomu](http://tomu.im). They do
-various things, and are intended to offer code examples and simple testing to
-ease your introduction to the Tomu platform.
+This is firmware for the blink(1) mk3 USB RGB LED device.
+It borrows heavily from the [Tomu](http://tomu.im) project.
+This directory is basically a fork of the
+[tomu-samples](https://github.com/im-tomu/tomu-samples) repository.
 
 ## How to use:
 
@@ -23,13 +24,14 @@ ease your introduction to the Tomu platform.
   you're using, and the instructions for compilation are included in each
   project's README.md
 
-2. Run `make deps .` to patch the linker with support for the Tomu and clone the [Gecko SDK](https://github.com/SiliconLabs/Gecko_SDK) locally
+2. Run `make deps .` to patch the linker with support for the blink(1) and Tomu
+    and clone the [Gecko SDK](https://github.com/SiliconLabs/Gecko_SDK) locally
 
 3. Now you can build the examples
 
 ## Flashing:
 
-Once you've compiled the code, you can flash the Tomu using `minicom` on linux
+Once you've compiled the code, you can flash the device using `minicom` on linux
 and OSX, or some other serial I/O utility on Windows. To do that, set it up with
 `115200 8n1`, then use `i` to show the bootloader version.
 
@@ -38,4 +40,4 @@ then press `^A-S`, choose XMODEM, choose the `.bin` file produced by the
 compilation, and wait until it's uploaded.
 
 Once that's done, press `b` to boot into the firmware. The bootloader will hang
-for 5-7 seconds, then the Tomu will boot.
+for 5-7 seconds, then the device will boot.
