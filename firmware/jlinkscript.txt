@@ -1,0 +1,8 @@
+si 1
+speed 4000
+device EFM32HG322F64
+//erase
+loadbin jlinkup.bin,0
+r
+g
+exit
