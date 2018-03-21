@@ -8719,11 +8719,13 @@ Source: http://www.diodes.com/datasheets/ds23001.pdf</description>
 <part name="P+1" library="supply1" deviceset="+5V" device=""/>
 <part name="P+2" library="supply1" deviceset="+5V" device=""/>
 <part name="GND3" library="supply1" library_urn="urn:adsk.eagle:library:371" deviceset="GND" device=""/>
-<part name="D1" library="diode" library_urn="urn:adsk.eagle:library:210" deviceset="DIODE-" device="SOD523" package3d_urn="urn:adsk.eagle:package:43410/1"/>
+<part name="D1" library="diode" library_urn="urn:adsk.eagle:library:210" deviceset="DIODE-" device="SOD523" package3d_urn="urn:adsk.eagle:package:43410/1" value="1N1418"/>
 </parts>
 <sheets>
 <sheet>
 <plain>
+<text x="25.4" y="175.26" size="1.778" layer="97">PB7 = USART0_TX LOC#4 (DI must be USART TX)</text>
+<text x="25.4" y="180.34" size="1.778" layer="97">Pinout adheres to Tomu 0.4 as closely as possible</text>
 </plain>
 <instances>
 <instance part="FRAME2" gate="G$1" x="15.24" y="7.62"/>
