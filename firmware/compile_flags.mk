@@ -8,10 +8,12 @@ CFLAGS = $(IFLAGS) \
 				 -fdata-sections \
 				 -fomit-frame-pointer \
 				 -std=c99 \
+         --specs=nano.specs \
 				 -MMD \
 				 -MP \
-				 -O0 \
-				 -g
+				 -Os \
+				 -g 
+
 
 LSCRIPT = ../tomu.ld
 

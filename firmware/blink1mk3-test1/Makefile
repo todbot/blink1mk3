@@ -86,6 +86,16 @@ clean:
 	@echo "Cleaning .o files..."
 	@rm -f *.o
 
+cleangecko:
+	@echo "Cleaning Gecko_SDK files..."
+	@find ../Gecko_SDK -type f -name \*.bin -delete
+	@find ../Gecko_SDK -type f -name \*.dump -delete
+	@find ../Gecko_SDK -type f -name \*.d -delete
+	@find ../Gecko_SDK -type f -name \*.elf -delete
+	@find ../Gecko_SDK -type f -name \*.map -delete
+	@find ../Gecko_SDK -type f -name \*.o -delete
+
+
 
 ################################################################################
 #
