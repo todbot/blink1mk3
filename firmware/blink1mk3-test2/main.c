@@ -49,6 +49,8 @@ typedef struct {
 rgb_t leds[nLEDs];  // NOTE: rgb_t is G,R,B formatted
 void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n);
 
+uint8_t ledn;
+
 #include "color_funcs.h"
 
 
@@ -76,7 +78,7 @@ static void  *hidDescriptor = NULL;
 // first byte is reportId
 static uint8_t  inbuf[REPORT2_COUNT];
 
-// The report to send to the host (only on reportId 1)
+// The report to send to the host 
 // generally it's a copy of the last report received
 SL_ALIGN(4)
 static uint8_t reportToSend[REPORT2_COUNT] SL_ATTRIBUTE_ALIGN(4);
@@ -301,6 +303,59 @@ static void updateLEDs(void)
     }
 }
 
+/**
+ * Note size = 100
+ * Note count = 10
+ * Total size = 1000 < FLASH_PAGE_SIZE
+ */
+uint8_t notesdata[FLASH_PAGE_SIZE];
+uint32_t *notesFlashStartAddress = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
+#define NOTE_SIZE 100
+#define NOTE_COUNT 10
+
+/**
+ *
+ */
+void notesSaveAll()
+{
+  MSC_Init();  // done only in setup?
+  MSC_ErasePage(notesFlashStartAddress); // erase first
+  MSC_WriteWord(notesFlashStartAddress, &notesdata, FLASH_PAGE_SIZE);
+}
+
+/**
+ *
+ */
+void notesLoadAll()
+{
+  memcpy( notesdata, notesFlashStartAddress, FLASH_PAGE_SIZE);
+}
+
+/**
+ * 
+ * uses global 'inbuf'
+ */
+void noteWrite(uint8_t pos )
+{
+  if( pos >= NOTE_COUNT ) {
+    // error
+    return;
+  }
+  memcpy( notesdata + (pos*NOTE_SIZE), inbuf+3, NOTE_SIZE);
+
+  notesSaveAll(); // FIXME: don't do this every write
+}
+
+/**
+ *
+ * uses global 'reportToSend'
+ */
+void noteRead(uint8_t pos)
+{
+  memcpy( reportToSend+3, notesdata + (pos*NOTE_SIZE), NOTE_SIZE );
+}
+
+
 /**********************************************************************
  * @brief Modify 'iSerialNumber' string to be based on chip's unique Id
  **********************************************************************/
@@ -353,6 +408,8 @@ int main()
   setupLeuart();
   
   write_str("startup...\n");
+
+  notesLoadAll();
   
   // debug LEDs on dev board
   GPIO_PinModeSet(gpioPortF, 4, gpioModePushPull, 0);
@@ -387,7 +444,8 @@ int main()
   }
 }
 
-///
+/*
+//
 void testFlash(void)
 {
 
@@ -414,8 +472,8 @@ void testFlash(void)
     data[i] = (*flashptr++); //read it back
   }
 
-}
-
+}*/
+ /*
 void test2Flash(void)
 {
 
@@ -441,14 +499,9 @@ void test2Flash(void)
   for (i = 0 ; i < TESTBUFFERSIZE ; i++) {
     data[i] = (*flashptr++); //read it back
   }
-
 }
-
-
-void writeFlash()
-{
-
-}
+ */
+ 
 
     
 /**
@@ -474,6 +527,8 @@ void writeFlash()
  *    - Write EEPROM location   format: { 1, 'E', ad,v,0,      0,0, 0 } (1)
  *    - Get version             format: { 1, 'v', 0,0,0,       0,0, 0 }
  *    - Test command            format: { 1, '!', 0,0,0,       0,0, 0 }
+ *    - Write 100-byte note     format: { 1, 'F', noteid, data0 ... data99 } (3)
+ *    - Read 100-byte note      format: { 1, 'F', noteid, data0 ... data99 } (3)
  *
  *  Fade to RGB color        format: { 1, 'c', r,g,b,      th,tl, ledn }
  *  Set RGB color now        format: { 1, 'n', r,g,b,        0,0, ledn }
@@ -504,58 +559,105 @@ static void handleMessage(uint8_t reportId)
   c.g = inbuf[3];
   c.b = inbuf[4];
 
+  //
   // Fade to RGB color - { 1,'c', r,g,b, th,tl, ledn }
-  // where t = number of 10msec ticks
+  //   where t = number of 10msec ticks
   if(      cmd == 'c' ) {
     uint16_t dmillis = (inbuf[5] << 8) | inbuf[6];
     uint8_t ledn = inbuf[7];          // which LED to address
     //playing = 0;
     rgb_setDest(&c, dmillis, ledn);
   }
+  //
   // set RGB color immediately  - {1,'n', r,g,b, 0,0,0 }
+  //
   else if( cmd == 'n' ) {
-    uint8_t ledn = inbuf[7];          // which LED to address
+    uint8_t iledn = inbuf[7];          // which LED to address
     // playing = 0;
-    if( ledn > 0 ) {
+    if( iledn > 0 ) {
       //playing = 3;                   // FIXME: wtf non-semantic 3
-      setLED( c.r, c.g, c.b, ledn ); // FIXME: no fading
+      setLED( c.r, c.g, c.b, iledn ); // FIXME: no fading
     }
     else {
       rgb_setDest( &c, 0, 0 );
       rgb_setCurr( &c );  // FIXME: no LED arg
     }    
   }
-  //  Read current color - { 1,'r', 0,0,0,   0,0, 0}
+  //
+  //  Read current color        - { 1,'r', 0,0,0,   0,0, 0}
+  //
   else if( cmd == 'r' ) {
-    uint8_t ledn = inbuf[7];          // which LED to address
-    if( ledn > 0 ) ledn--;
+    uint8_t iledn = inbuf[7];          // which LED to address
+    if( iledn > 0 ) iledn--;
     reportToSend[2] = leds[ledn].r;
     reportToSend[3] = leds[ledn].g;
     reportToSend[4] = leds[ledn].b;
     reportToSend[5] = 0;
     reportToSend[6] = 0;
-    reportToSend[7] = ledn;
+    reportToSend[7] = iledn;
   }
-  // play/pause, with position  - {1,'p', play,pos, 0,0,0,0}
+  //
+  //  Play/Pause, with pos     - { 1, 'p', {1/0},startpos,endpos,  0,0, 0 }
+  //
   else if( cmd == 'p' ) {
+    /* playing   = msgbuf[2];
+    playstart = msgbuf[3];
+    playend   = msgbuf[4];
+    playcount = msgbuf[5];
+    if( playend == 0 || playend > patt_max )
+      playend = patt_max;
+    else playend++;  // so that it's equivalent to patt_max, if you know what i mean
+    startPlaying();*/
+  }
+  //
+  // Play state readback      - { 1, 'S', 0,0,0, 0,0,0 }
+  //   resopnse format:
+  //
+  else if( cmd == 'S' ) {
     
   }
-  // write color pattern entry - {1,'P', r,g,b, th,tl, p}
+  //
+  // Write color pattern line  - {1,'P', r,g,b, th,tl, pos}
+  //
   else if( cmd == 'P' ) {
     
   }
-  // read color pattern entry - {1,'R', 0,0,0, 0,0, pos}
+  //
+  // Read color pattern entry - {1,'R', 0,0,0, 0,0, pos}
+  //
   else if( cmd == 'R' ) {
     
   }
+  //
+  // Write color pattern to flash memory: { 1, 'W', 0x55,0xAA, 0xCA,0xFE, 0,0}
+  //
+  else if( cmd == 'W' ) {
+    
+  }
+  //
+  // Set ledn : { 1, 'l', n, 0...}
+  //
+  else if( cmd == 'l' ) { 
+    ledn = inbuf[2];
+  }
+  //
+  //  Server mode tickle      - { 1, 'D', {1/0}, th,tl, {1,0}, sp, ep }
+  //
+  else if( cmd == 'D' ) {
+    
+  }
+  //
+  //  Get version               format: { 1, 'v', 0,0,0,        0,0, 0 }
+  //
   else if( cmd == 'v' ) {
-    GPIO_PinOutSet(gpioPortF, 5);
+    GPIO_PinOutSet(gpioPortF, 5);  // debug
     reportToSend[3] = blink1_version_major;
     reportToSend[4] = blink1_version_minor;
   }
+  //
+  //
+  //
   else if( cmd == '!' ) {  // testtest
-    //sprintf(dbgstr, "ms:%ld", uptime_millis);
-    //write_str(dbgstr);
     reportToSend[2] = 0x55;
     reportToSend[3] = 0xAA;
     reportToSend[4] = rId; //(uint8_t)(uptime_millis >> 24);
@@ -563,10 +665,15 @@ static void handleMessage(uint8_t reportId)
     reportToSend[6] = (uint8_t)(uptime_millis >> 8);
     reportToSend[7] = (uint8_t)(uptime_millis >> 0);
 
-    test2Flash();
+    //test2Flash(); // FIXME: this will get removed
   }
-  else if( cmd == 'f' && rId == 2 ) {  // read from flash
-    
+  else if( cmd == 'f' && rId == 2 ) {  // read note
+    uint8_t noteid = inbuf[2];
+    noteRead( noteid ); // fills out reportToSend
+  }
+  else if( cmd == 'F' && rId == 2 ) { // write note
+    uint8_t noteid = inbuf[2];
+    noteWrite( noteid ); // reads from global inbuf+3
   }
   
 }

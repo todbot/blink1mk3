@@ -43,7 +43,7 @@ extern "C" {
 #define REPORT_ID  1
 #define REPORT2_ID  2
 #define REPORT_COUNT 8
-#define REPORT2_COUNT 64
+#define REPORT2_COUNT 128
 
 SL_ALIGN(4)
 const char MyHIDReportDescriptor[48] SL_ATTRIBUTE_ALIGN(4) =
