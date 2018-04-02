@@ -33,7 +33,37 @@
 #include "callbacks.h"
 #include "descriptors.h"
 
-#define UNUSED     __attribute__ ((unused))
+#include "tinyprintf.h"
+
+#include "toboot.h"
+
+// note these toboot sections requires tomu-toboot.ld
+extern struct toboot_runtime toboot_runtime;
+
+/*
+// FIXME: this should make Toboot appear every time, but doesn't yet
+//   (but triggering the bootloader programmatically does work, see 'goboot' cmd in callbacks.c)
+//
+// Configure Toboot by identifying this as a V2 header.
+// Place the header at page 16, to maintain compatibility with
+// the serial bootloader and legacy programs.
+__attribute__((used, section(".toboot_header"))) struct toboot_configuration toboot_configuration = {
+  .magic = TOBOOT_V2_MAGIC,
+  .start = 16,
+  .config = TOBOOT_CONFIG_FLAG_ENABLE_IRQ | TOBOOT_CONFIG_FLAG_AUTORUN,
+  //.config = TOBOOT_CONFIG_FLAG_ENABLE_IRQ,
+  //.erase_mask_lo = (1 << 17), // secure_data1 only
+};
+*/
+
+/* Declare support for Toboot V2 */
+/* To enable this program to run when you first plug in Tomu, pass
+ * TOBOOT_CONFIG_FLAG_AUTORUN to this macro.  Otherwise, leave the
+ * configuration value at 0 to use the defaults.
+ */
+TOBOOT_CONFIGURATION(0);
+//TOBOOT_CONFIGURATION( TOBOOT_CONFIG_FLAG_AUTORUN );
+
 
 #define blink1_version_major '3'
 #define blink1_version_minor '1'
@@ -54,16 +84,35 @@ uint8_t ledn;
 #include "color_funcs.h"
 
 
-// LEUART Rx/Tx Port/Pin Location 
-#define LEUART_LOCATION    0
-#define LEUART_TXPORT      gpioPortD        // LEUART transmission port 
-#define LEUART_TXPIN       4                // LEUART transmission pin  
-#define LEUART_RXPORT      gpioPortD        // LEUART reception port    
-#define LEUART_RXPIN       5                // LEUART reception pin     
+//#define BOARD_TYPE tomu  // or blink1 or 
+
+// LEUART Rx/Tx Port/Pin Location
+//#if 1  // BOARD_TYPE == tomu / blink1
+#define LEUART_LOCATION    LEUART_ROUTE_LOCATION_LOC1
+#define LEUART_TXPORT      gpioPortB         // LEUART transmission port 
+#define LEUART_TXPIN       13                // LEUART transmission pin  
+#define LEUART_RXPORT      gpioPortB         // LEUART reception port    
+#define LEUART_RXPIN       14                // LEUART reception pin     
+//#else /// dev board
+//#define LEUART_LOCATION    LEUART_ROUTE_LOCATION_LOC0
+//#define LEUART_TXPORT      gpioPortD        // LEUART transmission port 
+//#define LEUART_TXPIN       4                // LEUART transmission pin  
+//#define LEUART_RXPORT      gpioPortD        // LEUART reception port    
+//#define LEUART_RXPIN       5                // LEUART reception pin     
+//#endif
+
 
 #include "leuart.h"
 
+
+// for tiny printf
+void myputc ( void* p, char c) {
+  (void)p;
+  write_char(c);
+}
+
 char dbgstr[30];
+
 
 
 // next time
@@ -389,6 +438,7 @@ int main()
   // Disable the watchdog that the bootloader started.
   WDOG->CTRL = 0;
   
+
   //CMU_ClockEnable(cmuClock_DMA, true);  
   CMU_ClockEnable(cmuClock_USART0, true);  
   // Switch on the clock for GPIO. Even though there's no immediately obvious
@@ -402,18 +452,18 @@ int main()
     // Something went wrong.
     while (1);
   }
-  
-  setupSpi();
-  
-  setupLeuart();
-  
-  write_str("startup...\n");
 
-  notesLoadAll();
+  setupLeuart();
+
+  //setupSpi();
+  
+  write_str("blink1mk3-test2 startup...\n");
+
+  //notesLoadAll();
   
   // debug LEDs on dev board
-  GPIO_PinModeSet(gpioPortF, 4, gpioModePushPull, 0);
-  GPIO_PinModeSet(gpioPortF, 5, gpioModePushPull, 0);
+  //GPIO_PinModeSet(gpioPortF, 4, gpioModePushPull, 0);
+  //GPIO_PinModeSet(gpioPortF, 5, gpioModePushPull, 0);
   
   // Enable the capacitive touch sensor. Remember, this consumes TIMER0 and
   // TIMER1, so those are off-limits to us.
@@ -438,72 +488,14 @@ int main()
 
   while(1) {
 
-    updateLEDs();
-    updateMisc();
+    //updateLEDs();
+    //updateMisc();
     
   }
 }
 
-/*
-//
-void testFlash(void)
-{
 
-#define TESTBUFFERSIZE 100
-  uint32_t data[TESTBUFFERSIZE];
-  uint32_t *flashstartAddress = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
-  uint32_t *flashptr;
-  uint32_t i;
 
-  for (i = 0; i < TESTBUFFERSIZE; i++) {
-    data[i] = i;
-  }
- 
-  // Configure HFRCO Band 
-  //CMU_HFRCOBandSet(cmuHFRCOBand_28MHz); //required for the correct write timing
-
-  MSC_Init(); //Enables the flash controller for writing.
-
-  MSC_ErasePage(flashstartAddress); //erase the page first
-  MSC_WriteWord(flashstartAddress, &data, TESTBUFFERSIZE*4); //write all of the data
-
-  flashptr = flashstartAddress;
-  for (i = 0 ; i < TESTBUFFERSIZE ; i++) {
-    data[i] = (*flashptr++); //read it back
-  }
-
-}*/
- /*
-void test2Flash(void)
-{
-
-#define TESTBUFFERSIZE 100
-  uint8_t data[TESTBUFFERSIZE];
-  uint32_t *flashstartAddress = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
-  uint32_t *flashptr;
-  uint32_t i;
-
-  for (i = 0; i < TESTBUFFERSIZE; i++) {
-    data[i] = i;
-  }
- 
-  // Configure HFRCO Band 
-  //CMU_HFRCOBandSet(cmuHFRCOBand_28MHz); //required for the correct write timing
-
-  MSC_Init(); //Enables the flash controller for writing.
-
-  MSC_ErasePage(flashstartAddress); //erase the page first
-  MSC_WriteWord(flashstartAddress, &data, TESTBUFFERSIZE); //write all of the data
-
-  flashptr = flashstartAddress;
-  for (i = 0 ; i < TESTBUFFERSIZE ; i++) {
-    data[i] = (*flashptr++); //read it back
-  }
-}
- */
- 
-
-    
 /**
  * handleMessage(char* inbuf) -- main command router
  *
@@ -542,9 +534,9 @@ void test2Flash(void)
  **/
 static void handleMessage(uint8_t reportId)
 {
-  //sprintf(dbgstr, "%d:%x,%x,%x,%x,%x,%x,%x,%x\n", reportId,
-  //        inbuf[0],inbuf[1],inbuf[2],inbuf[3],inbuf[4],inbuf[5],inbuf[6],inbuf[7] );
-  //write_str(dbgstr);
+  sprintf(dbgstr, "%d:%x,%x,%x,%x,%x,%x,%x,%x\n", reportId,
+          inbuf[0],inbuf[1],inbuf[2],inbuf[3],inbuf[4],inbuf[5],inbuf[6],inbuf[7] );
+  write_str(dbgstr);
 
   // pre-load response with request, contains report id
   uint8_t count = (reportId==REPORT_ID) ? REPORT_COUNT : REPORT2_COUNT;
@@ -650,7 +642,7 @@ static void handleMessage(uint8_t reportId)
   //  Get version               format: { 1, 'v', 0,0,0,        0,0, 0 }
   //
   else if( cmd == 'v' ) {
-    GPIO_PinOutSet(gpioPortF, 5);  // debug
+    //GPIO_PinOutSet(gpioPortF, 5);  // debug
     reportToSend[3] = blink1_version_major;
     reportToSend[4] = blink1_version_minor;
   }
@@ -704,7 +696,7 @@ static int ReportReceived(USB_Status_TypeDef status, uint32_t xferred, uint32_t 
 }
 
 /*****************************************************************************
- *
+ * when report id 2 is received
  *****************************************************************************/
 static int Report2Received(USB_Status_TypeDef status, uint32_t xferred, uint32_t remaining)
 {
@@ -713,7 +705,7 @@ static int Report2Received(USB_Status_TypeDef status, uint32_t xferred, uint32_t
   
   if ((status   == USB_STATUS_OK) &&
       (xferred  == REPORT2_COUNT) ) {
-    GPIO_PinOutSet(gpioPortF, 4);
+    //GPIO_PinOutSet(gpioPortF, 4);
     handleMessage(REPORT2_ID);
   }
 
