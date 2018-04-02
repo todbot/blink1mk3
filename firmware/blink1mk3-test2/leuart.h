@@ -1,13 +1,15 @@
 #ifndef LEUART_TOMU_H
 #define LEUART_TOMU
 
-// Must define the following before including this file
-//#define LEUART_LOCATION    LEUART_ROUTE_LOCATION_LOC1
-//#define LEUART_TXPORT      gpioPortB         // LEUART transmission port 
-//#define LEUART_TXPIN       13                // LEUART transmission pin  
-//#define LEUART_RXPORT      gpioPortB         // LEUART reception port    
-//#define LEUART_RXPIN       14                // LEUART reception pin     
-
+// Can define the following before including this file
+#ifndef LEUART_LOCATION
+// LOC1 is for tomu / blink1 
+#define LEUART_LOCATION    LEUART_ROUTE_LOCATION_LOC1
+#define LEUART_TXPORT      gpioPortB         // LEUART transmission port 
+#define LEUART_TXPIN       13                // LEUART transmission pin  
+#define LEUART_RXPORT      gpioPortB         // LEUART reception port    
+#define LEUART_RXPIN       14                // LEUART reception pin     
+#endif
 
 // Write a single character out LEUART0
 int write_char(int c) {

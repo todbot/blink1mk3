@@ -22,31 +22,8 @@
 
 #include <stdint.h>
 
+#include "color_types.h"
 
-// RGB triplet unsigned ints for internal use of 100x scale
-// used instead of floating point
-typedef struct {
-    int g;
-    int r;
-    int b;
-} rgbint_t;
-
-typedef struct {
-    rgb_t color;
-    uint16_t dmillis; // hundreths of a sec
-    uint8_t ledn;     // number of led, or 0 for all
-} patternline_t;
-
-typedef struct {
-    rgbint_t dest100x;  // the eventual destination color we want to hit
-    rgbint_t step100x;  // the amount of to move each tick
-    rgbint_t curr100x;  // the current color, times 10 (to lessen int trunc issue)
-    int stepcnt;
-} rgbfader_t;
-
-
-// allocate faders
-rgbfader_t fader[nLEDs];
 
 
 // set the current color OF ALL LEDs

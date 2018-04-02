@@ -38,7 +38,7 @@ IFLAGS = -I. \
 # Define CFLAGS, LSCRIPT and LFLAGS
 include ../compile_flags.mk
 # override because we're not doing bootloader yet
-LSCRIPT = ../tomu-nobootloader.ld
+#LSCRIPT = ../tomu-nobootloader.ld
 
 ################################################################################
 #

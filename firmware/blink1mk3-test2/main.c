@@ -6,6 +6,8 @@
  *
  * Differences from blink1mk3-test1:
  * - responds correctly to ReportId 2 (64-bytes), testable with "blink1-tool -i 2 --testtest" 
+ * - code reformatted heavily to pull ws2812 driver and color_funcs into separate files
+ * - code works on Tomu-class boards
  *
  *
  ********************************************************************************************/
@@ -28,82 +30,49 @@
 #include <em_core.h>
 #include <em_msc.h>
 
-//#include <stdio.h>
+#include "toboot.h"
 
-#include "callbacks.h"
-#include "descriptors.h"
+#include "leuart.h"
 
 #include "tinyprintf.h"
 
-#include "toboot.h"
+#include "ws2812_spi.h"
 
-// note these toboot sections requires tomu-toboot.ld
+#include "descriptors.h"
+
+#include "color_types.h"
+
+
+#define blink1_version_major '3'
+#define blink1_version_minor '1'
+
+
 extern struct toboot_runtime toboot_runtime;
-
-/*
-// FIXME: this should make Toboot appear every time, but doesn't yet
-//   (but triggering the bootloader programmatically does work, see 'goboot' cmd in callbacks.c)
-//
-// Configure Toboot by identifying this as a V2 header.
-// Place the header at page 16, to maintain compatibility with
-// the serial bootloader and legacy programs.
-__attribute__((used, section(".toboot_header"))) struct toboot_configuration toboot_configuration = {
-  .magic = TOBOOT_V2_MAGIC,
-  .start = 16,
-  .config = TOBOOT_CONFIG_FLAG_ENABLE_IRQ | TOBOOT_CONFIG_FLAG_AUTORUN,
-  //.config = TOBOOT_CONFIG_FLAG_ENABLE_IRQ,
-  //.erase_mask_lo = (1 << 17), // secure_data1 only
-};
-*/
 
 /* Declare support for Toboot V2 */
 /* To enable this program to run when you first plug in Tomu, pass
  * TOBOOT_CONFIG_FLAG_AUTORUN to this macro.  Otherwise, leave the
  * configuration value at 0 to use the defaults.
  */
-TOBOOT_CONFIGURATION(0);
-//TOBOOT_CONFIGURATION( TOBOOT_CONFIG_FLAG_AUTORUN );
+//TOBOOT_CONFIGURATION(0);
+TOBOOT_CONFIGURATION( TOBOOT_CONFIG_FLAG_AUTORUN );
 
 
-#define blink1_version_major '3'
-#define blink1_version_minor '1'
-
-// RGB triplet of 8-bit vals for input/output use
-typedef struct {
-    uint8_t g;
-    uint8_t r;
-    uint8_t b;
-} rgb_t;
-
+// max number of LEDs
 #define nLEDs 18
-rgb_t leds[nLEDs];  // NOTE: rgb_t is G,R,B formatted
+// array of LED data (sent to LEDs)
+rgb_t leds[nLEDs];  
+// foward decl for color_funcs.h (FIXME: make color_funcs a real lib)
 void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n);
-
+// global which is active LED
 uint8_t ledn;
+// allocate faders
+rgbfader_t fader[nLEDs];
 
 #include "color_funcs.h"
 
 
-//#define BOARD_TYPE tomu  // or blink1 or 
-
-// LEUART Rx/Tx Port/Pin Location
-//#if 1  // BOARD_TYPE == tomu / blink1
-#define LEUART_LOCATION    LEUART_ROUTE_LOCATION_LOC1
-#define LEUART_TXPORT      gpioPortB         // LEUART transmission port 
-#define LEUART_TXPIN       13                // LEUART transmission pin  
-#define LEUART_RXPORT      gpioPortB         // LEUART reception port    
-#define LEUART_RXPIN       14                // LEUART reception pin     
-//#else /// dev board
-//#define LEUART_LOCATION    LEUART_ROUTE_LOCATION_LOC0
-//#define LEUART_TXPORT      gpioPortD        // LEUART transmission port 
-//#define LEUART_TXPIN       4                // LEUART transmission pin  
-//#define LEUART_RXPORT      gpioPortD        // LEUART reception port    
-//#define LEUART_RXPIN       5                // LEUART reception pin     
-//#endif
-
-
-#include "leuart.h"
-
+char dbgstr[30];
 
 // for tiny printf
 void myputc ( void* p, char c) {
@@ -111,29 +80,27 @@ void myputc ( void* p, char c) {
   write_char(c);
 }
 
-char dbgstr[30];
-
-
-
-// next time
+// next time led_update should run
 const uint32_t led_update_millis = 10;  // tick msec
 uint32_t led_update_next;
 uint32_t lastmiscmillis;
 
+// for sendign back HID Descriptor in setupCmd
 static void  *hidDescriptor = NULL;
 
-// the report received from the host
+// The report packet received from the host
 // could be REPORT_COUNT or REPORT2_COUNT long
 // first byte is reportId
 static uint8_t  inbuf[REPORT2_COUNT];
 
-// The report to send to the host 
-// generally it's a copy of the last report received
+// The report packet to send to the host 
+// generally it's a copy of the last report received, then modified
 SL_ALIGN(4)
 static uint8_t reportToSend[REPORT2_COUNT] SL_ATTRIBUTE_ALIGN(4);
 
-
+// forward decl for callbacks struct
 int setupCmd(const USB_Setup_TypeDef *setup);
+void stateChange(USBD_State_TypeDef oldState, USBD_State_TypeDef newState);
 
 /* Define callbacks that are called by the USB stack on different events. */
 static const USBD_Callbacks_TypeDef callbacks =
@@ -175,90 +142,6 @@ void SpinDelay(uint32_t millis) {
 
   // Spin until the requested time has passed.
   while (uptime_millis < sleep_until);
-}
-
-
-/**********************************************************************
- * @brief  Setup USART0 SPI as Master
- **********************************************************************/
-void setupSpi(void)
-{
-  USART_InitSync_TypeDef usartInit = USART_INITSYNC_DEFAULT;  
-  
-  // Initialize SPI 
-  usartInit.databits = usartDatabits12;
-  usartInit.baudrate = 2400000; // 2.4MHz
-  usartInit.msbf = true;
-
-  USART_InitSync(USART0, &usartInit);
-  
-  // Enable SPI transmit and receive 
-  USART_Enable(USART0, usartEnable);
-  
-  // Configure GPIO pins for SPI
-  // These are the values on the EFM32HG dev board
-  GPIO_PinModeSet(gpioPortE, 12, gpioModePushPull, 0); // CLK
-  GPIO_PinModeSet(gpioPortE, 10, gpioModePushPull, 0); // MOSI 
- 
-  // Route USART clock and USART TX to LOC0 (PortE12, PortE10)
-  USART0->ROUTE = USART_ROUTE_LOCATION_LOC0 |
-                  USART_ROUTE_CLKPEN |
-                  USART_ROUTE_TXPEN;
-}
-
-// @ 2.4MHz, 3 bits for each ws2812 bit
-// ws2812 0 bit = 0b10000
-// ws2812 1 bit = 0b11110
-// => 12 bits carry 4 ws2812 bits
-// To send one ws2812 byte, send two 12-bit transfers
-// concept from: https://jeelabs.org/book/1450d/
-static const uint16_t bits[] =
-  {
-    0b100100100100, // => 0b0000 in ws2812 bits
-    0b100100100110, // => 0b0001 in ws2812 bits
-    0b100100110100, // => 0b0010 in ws2812 bits
-    0b100100110110, // => 0b0011 in ws2812 bits
-    0b100110100100, // => 0b0100 in ws2812 bits
-    0b100110100110, // => 0b0101 in ws2812 bits
-    0b100110110100, // => 0b0110 in ws2812 bits
-    0b100110110110, // => 0b0111 in ws2812 bits
-    0b110100100100, // => 0b1000 in ws2812 bits
-    0b110100100110, // => 0b1001 in ws2812 bits
-    0b110100110100, // => 0b1010 in ws2812 bits
-    0b110100110110, // => 0b1011 in ws2812 bits
-    0b110110100100, // => 0b1100 in ws2812 bits
-    0b110110100110, // => 0b1101 in ws2812 bits
-    0b110110110100, // => 0b1110 in ws2812 bits
-    0b110110110110, // => 0b1111 in ws2812 bits
-  };
-
-
-// note double-wide
-#define spiSend(x) USART_TxDouble( USART0, x)
-
-/**********************************************************************
- *
- **********************************************************************/
-static inline void sendByte (int value)
-{
-    spiSend( bits[value >> 4] );
-    spiSend( bits[value & 0xF] );
-}
-
-/**********************************************************************
- * @brief Send LED data out via SPI, disables interrupts
- **********************************************************************/
-static void sendLEDs(rgb_t* leds, int num)
-{
-  CORE_irqState_t is = CORE_EnterCritical();
-  for( int i=0; i<num; i++ ) {
-    // send out GRB data
-    sendByte( leds[i].g );
-    sendByte( leds[i].r );
-    sendByte( leds[i].b );
-  }
-  CORE_ExitCritical(is);
-  // delay at least 50usec
 }
 
 
@@ -329,7 +212,6 @@ void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n)
         leds[n].r = r; leds[n].g = g; leds[n].b = b;
     }
 }
-
 
 
 /**********************************************************************
@@ -438,7 +320,6 @@ int main()
   // Disable the watchdog that the bootloader started.
   WDOG->CTRL = 0;
   
-
   //CMU_ClockEnable(cmuClock_DMA, true);  
   CMU_ClockEnable(cmuClock_USART0, true);  
   // Switch on the clock for GPIO. Even though there's no immediately obvious
@@ -455,7 +336,7 @@ int main()
 
   setupLeuart();
 
-  //setupSpi();
+  setupSpi();
   
   write_str("blink1mk3-test2 startup...\n");
 
@@ -488,8 +369,8 @@ int main()
 
   while(1) {
 
-    //updateLEDs();
-    //updateMisc();
+    updateLEDs();
+    updateMisc();
     
   }
 }
@@ -839,9 +720,22 @@ int setupCmd(const USB_Setup_TypeDef *setup)
 
   } // else
 
-
    
   return retVal;
 }
+
+//
+void stateChange(USBD_State_TypeDef oldState, USBD_State_TypeDef newState)
+{
+  (void)oldState;
+  if (newState == USBD_STATE_CONFIGURED) {
+      //GPIO_PinOutClear(gpioPortA, 0);
+      //USBD_Read(EP_OUT, receiveBuffer, BUFFERSIZE, dataReceivedCallback);
+  }
+  else if ( newState == USBD_STATE_SUSPENDED ) {
+      //    GPIO_PinOutSet(gpioPortA, 0);
+  }
+}
+
 
 
