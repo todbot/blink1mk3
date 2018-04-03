@@ -127,7 +127,7 @@ static const uint8_t configDesc[] SL_ATTRIBUTE_ALIGN(4) =
   USB_CLASS_HID,                        /* bInterfaceClass      */
   0,                                    /* bInterfaceSubClass   */
   0,                                    /* bInterfaceProtocol   */
-  0,                                    /* iInterface           */
+  4,                                    /* iInterface           */
 
   /*** HID descriptor ***/
   USB_HID_DESCSIZE,       /* bLength               */
@@ -171,6 +171,8 @@ STATIC_CONST_STRING_DESC( iManufacturer, 'T','h','i','n','g','M');
                           
 STATIC_CONST_STRING_DESC( iProduct     , 'b','l','i','n','k','(','1',')',' ','m','k','3',
                                          ' ','0','0','2');
+STATIC_CONST_STRING_DESC( iInterface   , 'b','l','i','n','k','1',' ', 'h','i','d');
+
 //STATIC_CONST_STRING_DESC( iSerialNumber, '2','2','0','0','1','2','3','4' );
 
 SL_ALIGN(4)
@@ -184,7 +186,8 @@ static const void * const strings[] =
   &langID,
   &iManufacturer,
   &iProduct,
-  &iSerialNumber
+  &iSerialNumber,
+  &iInterface
 };
 
 /* Endpoint buffer sizes. Use 1 for Control/Interrupt
