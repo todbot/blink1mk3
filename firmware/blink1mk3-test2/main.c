@@ -42,6 +42,7 @@
 
 #include "color_types.h"
 
+#define DEBUG_HANDLEMESSAGE
 
 #define blink1_version_major '3'
 #define blink1_version_minor '1'
@@ -415,10 +416,12 @@ int main()
  **/
 static void handleMessage(uint8_t reportId)
 {
+#ifdef DEBUG_HANDLEMESSAGE
   sprintf(dbgstr, "%d:%x,%x,%x,%x,%x,%x,%x,%x\n", reportId,
           inbuf[0],inbuf[1],inbuf[2],inbuf[3],inbuf[4],inbuf[5],inbuf[6],inbuf[7] );
   write_str(dbgstr);
-
+#endif
+  
   // pre-load response with request, contains report id
   uint8_t count = (reportId==REPORT_ID) ? REPORT_COUNT : REPORT2_COUNT;
   memcpy( (void*)reportToSend, (void*)inbuf, count);
