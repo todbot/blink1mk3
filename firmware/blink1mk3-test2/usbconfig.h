@@ -39,7 +39,6 @@ extern "C" {
 #define EP_IN  0x81
 #define EP_OUT 0x01
 
-#define HID_INTERFACE_NO     0
 
 /****************************************************************************
 **                                                                         **
