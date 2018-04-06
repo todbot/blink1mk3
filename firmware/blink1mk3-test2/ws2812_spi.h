@@ -1,27 +1,47 @@
 /**
  * Simple WS2812 driver using USART in SPI mode but not using DMA
- * Turns off interrupts during sending to strip
+ * Turns off interrupts during sending to strip.
+ * 
+ * Uses concept from: https://jeelabs.org/book/1450d/
  *
- */
+ * 2018, Tod E. Kurt / https://todbot.com/blog
+ *
+ **/
 
 #ifndef WS2812_SPI_H
 #define WS2812_SPI_H
 
 #include "color_types.h"
 
-#ifndef USART0_LOCATION
+
+#if defined BOARD_TYPE_BLINK1MK3
+// --- blink1mk3
+#define USART0_LOCATION USART_ROUTE_LOCATION_LOC4
+#define USART0_TXPORT   gpioPortB
+#define USART0_TXPIN    7
+#define USART0_CLKPORT  gpioPortB // but ununsed here
+#define USART0_CLKPIN   13        // but ununsed here
+
+#elif defined BOARD_TYPE_TOMU
+// --- tomu board
 #define USART0_LOCATION USART_ROUTE_LOCATION_LOC3
 #define USART0_TXPORT   gpioPortE
 #define USART0_TXPIN    13
 #define USART0_CLKPORT  gpioPortC // but ununsed here
 #define USART0_CLKPIN   15        // but ununsed here
-// efm32hg dev board
-//#define USART0_LOCATION USART_ROUTE_LOCATION_LOC0
-//#define USART0_TXPORT   gpioPortE
-//#define USART0_TXPIN    10
-//#define USART0_CLKPORT  gpioPortE
-//#define USART0_CLKPIN   12
+
+#elif defined BOARD_TYPE_EFM32HGDEVKIT
+// --- efm32hg dev board
+#define USART0_LOCATION USART_ROUTE_LOCATION_LOC0
+#define USART0_TXPORT   gpioPortE
+#define USART0_TXPIN    10
+#define USART0_CLKPORT  gpioPortE
+#define USART0_CLKPIN   12
+
+#else
+#error "BORARD_TYPE_... not defined"
 #endif
+
 
 /**********************************************************************
  * @brief  Setup USART0 SPI as Master

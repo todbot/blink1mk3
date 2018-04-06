@@ -1,3 +1,10 @@
+/**
+ * Simple LEUART0 setup 
+ * 
+ * 2018, Tod E. Kurt, https://todbot.com/blog
+ *
+ **/
+
 #ifndef LEUART_TOMU_H
 #define LEUART_TOMU
 

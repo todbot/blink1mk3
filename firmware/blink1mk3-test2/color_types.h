@@ -31,4 +31,11 @@ typedef struct {
     uint8_t ledn;     // number of led, or 0 for all
 } patternline_t;
 
+// note: this is for doing ROM size address calcs that can't use sizeof()
+//#define patternline_size (3 + 2 + 1)
+
+// what is this for exactly? only used in off()?
+#define setRGBt(rgbt,x,y,z) { rgbt.r=x; rgbt.g=y; rgbt.b=z; }
+
+
 #endif

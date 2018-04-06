@@ -30,26 +30,26 @@
 #include <em_core.h>
 #include <em_msc.h>
 
+#define BOARD_TYPE_BLINK1MK3
+//#define BOARD_TYPE_TOMU 
+//#define BOARD_TYPE_EFM32HGDEVKIT
+
+//#define DEBUG_HANDLEMESSAGE
+
 #include "toboot.h"
 
 #include "leuart.h"
-
 #include "tinyprintf.h"
-
 #include "ws2812_spi.h"
-
 #include "descriptors.h"
-
 #include "color_types.h"
 
-#define DEBUG_HANDLEMESSAGE
 
 #define blink1_version_major '3'
 #define blink1_version_minor '1'
 
 
 extern struct toboot_runtime toboot_runtime;
-
 /* Declare support for Toboot V2 */
 /* To enable this program to run when you first plug in Tomu, pass
  * TOBOOT_CONFIG_FLAG_AUTORUN to this macro.  Otherwise, leave the
@@ -70,7 +70,7 @@ uint8_t ledn;
 // allocate faders
 rgbfader_t fader[nLEDs];
 
-#include "color_funcs.h"
+#include "color_funcs.h"  // included here becuase it needs setLed()
 
 
 char dbgstr[30];
@@ -84,7 +84,8 @@ void myputc ( void* p, char c) {
 // next time led_update should run
 const uint32_t led_update_millis = 10;  // tick msec
 uint32_t led_update_next;
-uint32_t lastmiscmillis;
+
+uint32_t last_misc_millis;
 
 // for sendign back HID Descriptor in setupCmd
 static void  *hidDescriptor = NULL;
@@ -152,8 +153,8 @@ void SpinDelay(uint32_t millis) {
  **********************************************************************/
 static void updateMisc()
 {
-  if( (uptime_millis - lastmiscmillis) > 500 ) {
-    lastmiscmillis = uptime_millis;
+  if( (uptime_millis - last_misc_millis) > 500 ) {
+    last_misc_millis = uptime_millis;
     write_char('.');
   }
   
@@ -246,7 +247,7 @@ uint32_t *notesFlashStartAddress = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
 #define NOTE_COUNT 10
 
 /**
- *
+ * Save all user notes to flash.
  */
 void notesSaveAll()
 {
@@ -256,7 +257,7 @@ void notesSaveAll()
 }
 
 /**
- *
+ * Load all user notes from flash to RAM
  */
 void notesLoadAll()
 {
@@ -264,8 +265,8 @@ void notesLoadAll()
 }
 
 /**
- * 
- * uses global 'inbuf'
+ * Write a note to RAM.
+ * - Uses global 'inbuf'
  */
 void noteWrite(uint8_t pos )
 {
@@ -279,8 +280,8 @@ void noteWrite(uint8_t pos )
 }
 
 /**
- *
- * uses global 'reportToSend'
+ * Read a user note from RAM into 'reportToSend' buffer.
+ * - Uses global 'reportToSend'
  */
 void noteRead(uint8_t pos)
 {
@@ -475,11 +476,11 @@ static void handleMessage(uint8_t reportId)
   //
   //  Play/Pause, with pos     - { 1, 'p', {1/0},startpos,endpos,  0,0, 0 }
   //
-  else if( cmd == 'p' ) {
-    /* playing   = msgbuf[2];
-    playstart = msgbuf[3];
-    playend   = msgbuf[4];
-    playcount = msgbuf[5];
+  else if( cmd == 'p' ) { /*
+    playing   = inbuf[2];
+    playstart = inbuf[3];
+    playend   = inbuf[4];
+    playcount = inbuf[5];
     if( playend == 0 || playend > patt_max )
       playend = patt_max;
     else playend++;  // so that it's equivalent to patt_max, if you know what i mean
