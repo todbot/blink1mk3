@@ -8,6 +8,8 @@
  * - responds correctly to ReportId 2 (64-bytes), testable with "blink1-tool -i 2 --testtest" 
  * - code reformatted heavily to pull ws2812 driver and color_funcs into separate files
  * - code works on Tomu-class boards
+ * - code works on blink1mk3-class boards (see ws2812_spi.h and BOARD_TYPE_ defines
+ * - specifies itself correctly to Toboot via TOBOOT_CONFIGURATION() macro and new tomu.ld 
  *
  *
  ********************************************************************************************/
