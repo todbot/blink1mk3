@@ -65,6 +65,9 @@ TOBOOT_CONFIGURATION( TOBOOT_CONFIG_FLAG_AUTORUN );
 rgb_t leds[nLEDs];  
 // foward decl for color_funcs.h (FIXME: make color_funcs a real lib)
 static void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n);
+#define setLEDsAll(r,g,b) { setLED(r,g,b, 255); } // 255 means all
+static inline void displayLEDs(void);
+
 // global which is active LED
 uint8_t ledn;
 // allocate faders
@@ -174,9 +177,14 @@ static void SpinDelay(uint32_t millis) {
   while (uptime_millis < sleep_until);
 }
 
+static void off();
 /* Set Toboot magic value to force bootloader and reset */
 static void rebootToBootloader() {
   toboot_runtime.magic = TOBOOT_FORCE_ENTRY_MAGIC;
+  setLEDsAll(0,0,0);
+  displayLEDs();
+  USBD_Disconnect();
+  USBTIMER_DelayMs(100); 
   NVIC_SystemReset();    
 }
 
@@ -190,7 +198,9 @@ static void updateMisc()
     write_char('.');
 
     if( shouldRebootToBootloader ) {
+      //write_str("rebooting to bootloader...\n");
       rebootToBootloader();
+      //write_str("why am I still here\n");
     }
     
   }
@@ -232,7 +242,7 @@ static void updateMisc()
 /**********************************************************************
  * @brief Send LED data out to LEDs
  **********************************************************************/
-static void displayLEDs(void)
+static inline void displayLEDs(void)
 {
   ws2812_sendLEDs( leds, nLEDs );    // ws2811_showRGB();
 }
@@ -257,8 +267,6 @@ static void startPlaying( void )
     //pattern_update_next = 0; // invalidate it so plays immediately
     //memcpy( pattern, patternflash, sizeof(patternline_t)*patt_max);
 }
-
-#define setLEDsAll(r,g,b) { setLED(r,g,b, 255); } // 255 means all
 
 /**********************************************************************
  * @brief Set the color of a particular LED, or all of them
@@ -401,28 +409,30 @@ int main()
   
   write_str("blink1mk3-test2 startup...\n");
 
-  //notesLoadAll();
+#if 0
+  notesLoadAll();
+#endif
 
-  // Enable the capacitive touch sensor. Remember, this consumes TIMER0 and
-  // TIMER1, so those are off-limits to us.
+  // Enable the capacitive touch sensor.
+  // Remember, this consumes TIMER0 and TIMER1, so those are off-limits to us.
   //CAPSENSE_Init();
 
   makeSerialNumber();
   
   hidDescriptor = (void*) USBDESC_HidDescriptor; // FIXME
   
-  // Enable the USB controller. Remember, this consumes TIMER2 as per
-  // -DUSB_TIMER=USB_TIMER2 in Makefile because TIMER0 and TIMER1 are already
-  // taken by the capacitive touch sensors.
+  // Enable the USB controller.
+  // Remember, this consumes TIMER2 as per -DUSB_TIMER=USB_TIMER2 in Makefile
+  // because TIMER0 & TIMER1 are already taken by the capacitive touch sensors.
   USBD_Init(&initstruct);
 
-  #if 0
   // When using a debugger it is practical to uncomment the following three
   // lines to force host to re-enumerate the device.
+#if 0
   USBD_Disconnect();      
   USBTIMER_DelayMs(1000); 
   USBD_Connect();         
-  #endif
+#endif
 
   // startup white fadeout
   for( uint8_t i=255; i>0; i-- ) {
@@ -434,7 +444,7 @@ int main()
   
   //startPlaying();  // to load pattern up
   off();
-  displayLEDs();
+  displayLEDs(); // why this here, to prime the system?
 
   while(1) {
 
@@ -558,19 +568,45 @@ static void handleMessage(uint8_t reportId)
   //   resopnse format:
   //
   else if( cmd == 'S' ) {
-    
+    reportToSend[2] = playing;
+    reportToSend[3] = playstart;
+    reportToSend[4] = playend;
+    reportToSend[5] = playcount;
+    reportToSend[6] = playpos;
+    reportToSend[7] = 0;
   }
   //
   // Write color pattern line  - {1,'P', r,g,b, th,tl, pos}
   //
   else if( cmd == 'P' ) {
-    
+    // was doing this copy with a cast, but broke it out for clarity
+    ptmp.color.r = inbuf[2];
+    ptmp.color.g = inbuf[3];
+    ptmp.color.b = inbuf[4];
+    ptmp.dmillis = ((uint16_t)inbuf[5] << 8) | inbuf[6];
+    ptmp.ledn    = ledn;
+    uint8_t pos  = inbuf[7];
+    if( pos >= patt_max ) pos = 0;  // just in case
+    // save pattern line to RAM
+    memcpy( &pattern[pos], &ptmp, sizeof(patternline_t) );
+    //if( pos == (patt_max-1) ) {  // NOTE: writing last position causes write to flash
+    //do_pattern_write = 1;
+    //writePatternFlash();
+    //}    
   }
   //
   // Read color pattern entry - {1,'R', 0,0,0, 0,0, pos}
   //
   else if( cmd == 'R' ) {
-    
+    uint8_t pos = inbuf[7];
+    if( pos >= patt_max ) pos = 0;
+    patternline_t patt = pattern[pos];
+    reportToSend[2] = patt.color.r;
+    reportToSend[3] = patt.color.g;
+    reportToSend[4] = patt.color.b;
+    reportToSend[5] = (patt.dmillis >> 8);
+    reportToSend[6] = (patt.dmillis & 0xff);
+    reportToSend[7] = patt.ledn;
   }
   //
   // Write color pattern to flash memory: { 1, 'W', 0x55,0xAA, 0xCA,0xFE, 0,0}
@@ -649,14 +685,14 @@ static void handleMessage(uint8_t reportId)
 static int ReportReceived(USB_Status_TypeDef status, uint32_t xferred, uint32_t remaining)
 {
   (void) remaining;
-
+  
   if ((status   == USB_STATUS_OK) &&
       (xferred  == REPORT_COUNT) ) {
-      //      && (setReportFunc != NULL) ) {
-      //setReportFunc( (uint8_t)tmpBuffer);
+    //      && (setReportFunc != NULL) ) {
+    //setReportFunc( (uint8_t)tmpBuffer);
     handleMessage(REPORT_ID);
   }
-
+  
   return USB_STATUS_OK;
 }
 
@@ -673,7 +709,7 @@ static int Report2Received(USB_Status_TypeDef status, uint32_t xferred, uint32_t
     //GPIO_PinOutSet(gpioPortF, 4);
     handleMessage(REPORT2_ID);
   }
-
+  
   return USB_STATUS_OK;
 }
 
@@ -699,12 +735,12 @@ int setupCmd(const USB_Setup_TypeDef *setup)
   if (  (setup->Type         == USB_SETUP_TYPE_STANDARD)
         && (setup->Direction == USB_SETUP_DIR_IN)
         && (setup->Recipient == USB_SETUP_RECIPIENT_INTERFACE)    ) {
-      
+    
     /* A HID device must extend the standard GET_DESCRIPTOR command   */
     /* with support for HID descriptors.                              */
     switch (setup->bRequest) {
     case GET_DESCRIPTOR:
-
+      
       if ( (setup->wValue >> 8) == USB_HID_REPORT_DESCRIPTOR ) {
         USBD_Write(0, (void*)MyHIDReportDescriptor,
                    SL_MIN(sizeof(MyHIDReportDescriptor), setup->wLength),
@@ -722,35 +758,35 @@ int setupCmd(const USB_Setup_TypeDef *setup)
     }
   }
   else {
-
-      if ( (setup->Type         == USB_SETUP_TYPE_CLASS)
-           && (setup->Recipient == USB_SETUP_RECIPIENT_INTERFACE) ) { 
-        // && (setup->wIndex    == HIDKBD_INTERFACE_NO)    ) {
-  
-        // Implement the necessary HID class specific commands.           
-        switch ( setup->bRequest ) {
-
-        case USB_HID_SET_REPORT:           // 0x09, receive data from host
-          /*
+    
+    if ( (setup->Type         == USB_SETUP_TYPE_CLASS)
+         && (setup->Recipient == USB_SETUP_RECIPIENT_INTERFACE) ) { 
+      // && (setup->wIndex    == HIDKBD_INTERFACE_NO)    ) {
+      
+      // Implement the necessary HID class specific commands.           
+      switch ( setup->bRequest ) {
+        
+      case USB_HID_SET_REPORT:           // 0x09, receive data from host
+        /*
           if ( ( (setup->wValue >> 8)      == 3)              // FEATURE report 
           if ( ( (setup->wValue >> 8)      == 2)              // OUTPUT report 
-               && ( (setup->wValue & 0xFF) == 1)              // Report ID  
-               && (setup->wLength          == 1)              // Report length 
-               && (setup->Direction        != USB_SETUP_DIR_OUT)    ) { // 
-          */
-          
-          if( (setup->wValue & 0xFF) == REPORT_ID ) { 
-            USBD_Read(0, (void*)&inbuf, REPORT_COUNT, ReportReceived);
-            retVal = USB_STATUS_OK;
-          }
-          else if( (setup->wValue & 0xFF) == REPORT2_ID ) {
-            USBD_Read(0, (void*)&inbuf, REPORT2_COUNT, Report2Received);
-            retVal = USB_STATUS_OK;            
-          }
-
-          break;
-
-        case USB_HID_GET_REPORT:           // 0x01, send data to host
+          && ( (setup->wValue & 0xFF) == 1)              // Report ID  
+          && (setup->wLength          == 1)              // Report length 
+          && (setup->Direction        != USB_SETUP_DIR_OUT)    ) { // 
+        */
+        
+        if( (setup->wValue & 0xFF) == REPORT_ID ) { 
+          USBD_Read(0, (void*)&inbuf, REPORT_COUNT, ReportReceived);
+          retVal = USB_STATUS_OK;
+        }
+        else if( (setup->wValue & 0xFF) == REPORT2_ID ) {
+          USBD_Read(0, (void*)&inbuf, REPORT2_COUNT, Report2Received);
+          retVal = USB_STATUS_OK;            
+        }
+        
+        break;
+        
+      case USB_HID_GET_REPORT:           // 0x01, send data to host
           /*
           if ( ( (setup->wValue >> 8)       == 1)             // INPUT report  
                && ( (setup->wValue & 0xFF)  == 1)             // Report ID     
@@ -758,18 +794,18 @@ int setupCmd(const USB_Setup_TypeDef *setup)
                //               && (setup->Direction         == USB_SETUP_DIR_IN)    ) {
                ) {
           */
-          if( ((setup->wValue & 0xFF) == REPORT_ID)  ) {
-            USBD_Write(0, &reportToSend, REPORT_COUNT, NULL);
-            retVal = USB_STATUS_OK;
-          }
-          else if( ((setup->wValue & 0xFF) == REPORT2_ID) ) {
-            USBD_Write(0, &reportToSend, REPORT2_COUNT, NULL);
-            retVal = USB_STATUS_OK;
-          }
-
-          break;
+        if( ((setup->wValue & 0xFF) == REPORT_ID)  ) {
+          USBD_Write(0, &reportToSend, REPORT_COUNT, NULL);
+          retVal = USB_STATUS_OK;
+        }
+        else if( ((setup->wValue & 0xFF) == REPORT2_ID) ) {
+          USBD_Write(0, &reportToSend, REPORT2_COUNT, NULL);
+          retVal = USB_STATUS_OK;
+        }
+        
+        break;
           
-          /*
+      /*
       case USB_HID_SET_IDLE:
         // ********************
           if ( ( (setup->wValue & 0xFF)    == 0)              // Report ID     
@@ -803,21 +839,21 @@ int setupCmd(const USB_Setup_TypeDef *setup)
       } // if
 
   } // else
-
-   
+  
+  
   return retVal;
 }
 
-//
+// unused for now
 void stateChange(USBD_State_TypeDef oldState, USBD_State_TypeDef newState)
 {
   (void)oldState;
   if (newState == USBD_STATE_CONFIGURED) {
-      //GPIO_PinOutClear(gpioPortA, 0);
-      //USBD_Read(EP_OUT, receiveBuffer, BUFFERSIZE, dataReceivedCallback);
+    //GPIO_PinOutClear(gpioPortA, 0);
+    //USBD_Read(EP_OUT, receiveBuffer, BUFFERSIZE, dataReceivedCallback);
   }
   else if ( newState == USBD_STATE_SUSPENDED ) {
-      //    GPIO_PinOutSet(gpioPortA, 0);
+    //    GPIO_PinOutSet(gpioPortA, 0);
   }
 }
 
