@@ -44,9 +44,9 @@ LSCRIPT = ./tomu-toboot.ld
 #
 # PHONY TARGETS
 #
-.PHONY: all $(TARGET) check clean 
+.PHONY: all $(TARGET) check clean size
 
-all: $(TARGET) 
+all: $(TARGET) size
 
 $(TARGET): $(TARGET).bin $(TARGET).dump $(TARGET).elf 
 
@@ -142,3 +142,6 @@ program-openocd:
 
 size:
 	arm-none-eabi-size  $(TARGET).elf
+
+dfu:
+	dfu-util -v --device 1209:70b1 --download $(TARGET).bin
