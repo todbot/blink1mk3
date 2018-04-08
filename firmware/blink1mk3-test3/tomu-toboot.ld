@@ -12,8 +12,9 @@
 MEMORY
 {
   FLASH (rx) : ORIGIN = 0x00004000, LENGTH = 0xC000
-  RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 0x2000
-}
+  /*RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 0x2000*/
+  RAM (rwx)  : ORIGIN = 0x20000000 + 8, LENGTH = 0x2000 - 8
+ }
 
 /* Linker script to place sections and symbol values. Should be used together
  * with other linker script that defines memory regions FLASH and RAM.
