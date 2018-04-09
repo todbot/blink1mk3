@@ -11,10 +11,9 @@
 
 MEMORY
 {
-  FLASH (rx) : ORIGIN = 0x00004000, LENGTH = 0xC000
-  /*RAM (rwx)  : ORIGIN = 0x20000000, LENGTH = 0x2000*/
-  RAM (rwx)  : ORIGIN = 0x20000000 + 8, LENGTH = 0x2000 - 8
- }
+  FLASH (rx) : ORIGIN = 0x00004000, LENGTH = 64k - 16k  /* Flash: 16k reserved for tomubootloader */
+  RAM (rwx)  : ORIGIN = 0x20000000 + 8, LENGTH = 0x2000 - 8  /* RAM: 8k - 8 tomu bytes*/
+}
 
 /* Linker script to place sections and symbol values. Should be used together
  * with other linker script that defines memory regions FLASH and RAM.
@@ -79,6 +78,10 @@ SECTIONS
 
     KEEP(*(.eh_frame*))
   } > FLASH
+  
+  /* flash segements are 1024 bytes big */
+  userNotesSection  = ORIGIN(FLASH) + LENGTH(FLASH) - 1024;
+  patternSection    = ORIGIN(FLASH) + LENGTH(FLASH) - (2*1024);
 
   .ARM.extab :
   {
@@ -203,5 +206,6 @@ SECTIONS
   ASSERT(__StackLimit >= __HeapLimit, "region RAM overflowed with stack")
 
   /* Check if FLASH usage exceeds FLASH size */
-  ASSERT( LENGTH(FLASH) >= (__etext + SIZEOF(.data)), "FLASH memory overflowed !")
+  /* this assert is wrong I think SIZEOF(.data) includes RAM? */
+  /* ASSERT( LENGTH(FLASH) >= (__etext + SIZEOF(.data)), "FLASH memory overflowed !") */
 }

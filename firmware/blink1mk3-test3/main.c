@@ -59,6 +59,7 @@ extern struct toboot_runtime toboot_runtime;
 TOBOOT_CONFIGURATION( TOBOOT_CONFIG_FLAG_AUTORUN );
 
 
+
 // max number of LEDs
 #define nLEDs 18
 // array of LED data (sent to LEDs)
@@ -75,6 +76,15 @@ rgbfader_t fader[nLEDs];
 
 #include "color_funcs.h"  // included here becuase it needs setLed()
 
+
+// used when sprintf()-ing to leuart
+char dbgstr[30];
+
+// for tiny printf
+void myputc ( void* p, char c) {
+  (void)p;
+  write_char(c);
+}
 
 // number of entries a color pattern can contain
 #define patt_max 32
@@ -95,14 +105,50 @@ uint8_t ledn;    // temp ledn holder
 // in-memory copy of non-volatile pattern
 patternline_t pattern[patt_max]; 
 
-// used when sprintf()-ing to leuart
-char dbgstr[30];
+/*
+ * non-volatile color pattern
+ *
+ * 6 bytes / patternline = 21.3 pattern lines (fade is 2bytes)
+ *
+ * FLASH_PAGE_SIZE = 1024 in Gecko_SDK/platform/Device/SiliconLabs/EFM32HG/Include/efm32hg309f64.h
+ * FLASH_SIZE = 65536 (64k)
+ * .patternSection is in flash at address 0xf800 (64k - (2*1k)) 
+ */
+const patternline_t patternFlash[patt_maxflash]  __attribute__((section (".patternSection"))) = 
+{
+    //    G     R     B    fade ledn
+    { { 0x00, 0xff, 0x00 },  50, 1 }, // 0  red A
+    { { 0x00, 0xff, 0x00 },  50, 2 }, // 1  red B
+    { { 0x00, 0x00, 0x00 },  50, 0 }, // 2  off both
+    { { 0xff, 0x00, 0x00 },  50, 1 }, // 3  grn A
+    { { 0xff, 0x00, 0x00 },  50, 2 }, // 4  grn B
+    { { 0x00, 0x00, 0x00 },  50, 0 }, // 5  off both
+    { { 0x00, 0x00, 0xff },  50, 1 }, // 6  blu A
+    { { 0x00, 0x00, 0xff },  50, 2 }, // 7  blu B
+    { { 0x00, 0x00, 0x00 },  50, 0 }, // 8  off both
+    { { 0x80, 0x80, 0x80 }, 100, 0 }, // 9  half-bright, both LEDs
+    { { 0x00, 0x00, 0x00 }, 100, 0 }, // 10 off both
+    { { 0xff, 0xff, 0xff },  50, 1 }, // 11 white A
+    { { 0x00, 0x00, 0x00 },  50, 1 }, // 12 off A
+    { { 0xff, 0xff, 0xff },  50, 2 }, // 13 white B
+    { { 0x00, 0x00, 0x00 }, 100, 2 }, // 14 off B
+    { { 0x00, 0x00, 0x00 }, 100, 0 }, // 15 off everyone
+};
 
-// for tiny printf
-void myputc ( void* p, char c) {
-  (void)p;
-  write_char(c);
-}
+/*
+ * "Notes" are user-writable and -readable blobs of data
+ *
+ * Note size = 100
+ * Note count = 10
+ * Total size = 1000 < FLASH_PAGE_SIZE
+ */
+uint8_t notesdata[FLASH_PAGE_SIZE] ;
+//uint32_t *notesFlashStartAddress = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
+uint32_t* notesFlashStartAddress  __attribute__ ((used, section(".userNoteSection"))) ;
+
+#define NOTE_SIZE 100
+#define NOTE_COUNT 10
+
 
 // The uptime in milliseconds, maintained by the SysTick timer.
 volatile uint32_t uptime_millis;
@@ -300,18 +346,50 @@ static void updateLEDs(void)
 
         rgb_updateCurrent();  // playing=3 => direct LED addressing (not anymore)
         displayLEDs();
-    }
+#if 0
+        // check for non-computer power up
+        if( !usbHasBeenSetup ) {
+            if( !playing && now > 500 ) {  // 500 msec wait
+                playing = 2;
+                startPlaying();
+            }
+        }
+        else {  // else usb is setup...
+            if( playing == 2 ) { // ...but we started a powerup play, so reset
+                off();
+            }
+        }
+#endif
+    } // if led_update_next
+
+    // playing light pattern
+    if( playing ) {
+        if( (long)(now - pattern_update_next) > 0  ) { // time to get next line
+            ctmp = pattern[playpos].color;
+            ttmp = pattern[playpos].dmillis;
+            ledn = pattern[playpos].ledn;
+            if( ttmp == 0 && ctmp.r == 0 && ctmp.g == 0 && ctmp.b == 0) {
+                // skip lines set to zero
+            } else {
+                rgb_setDest( &ctmp, ttmp, ledn );
+            }
+            playpos++;
+            if( playpos == playend ) {
+                playpos = playstart; // loop the pattern
+                playcount--;
+                if( playcount == 0 ) {
+                    playing=0; // done!
+                }
+                else if(playcount==255) {
+                    playcount = 0; // infinite playing
+                }
+            }
+            pattern_update_next += ttmp*10;
+        }
+    } // playing
+    
 }
 
-/*
- * Note size = 100
- * Note count = 10
- * Total size = 1000 < FLASH_PAGE_SIZE
- */
-uint8_t notesdata[FLASH_PAGE_SIZE];
-uint32_t *notesFlashStartAddress = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
-#define NOTE_SIZE 100
-#define NOTE_COUNT 10
 
 /*
  * Save all user notes to flash.
@@ -408,6 +486,10 @@ int main()
   ws2812_setupSpi();
   
   write_str("blink1mk3-test2 startup...\n");
+
+  // load pattern from flash to RAM
+  memset( pattern, 0, sizeof(patternline_t)*patt_max); // zero out just in case
+  memcpy( pattern, patternFlash, sizeof(patternline_t)*patt_maxflash);
 
 #if 0
   notesLoadAll();
@@ -519,7 +601,7 @@ static void handleMessage(uint8_t reportId)
   if(      cmd == 'c' ) {
     uint16_t dmillis = (inbuf[5] << 8) | inbuf[6];
     uint8_t ledn = inbuf[7];          // which LED to address
-    //playing = 0;
+    playing = 0;
     rgb_setDest(&c, dmillis, ledn);
   }
   //
@@ -527,9 +609,9 @@ static void handleMessage(uint8_t reportId)
   //
   else if( cmd == 'n' ) {
     uint8_t iledn = inbuf[7];          // which LED to address
-    // playing = 0;
+     playing = 0;
     if( iledn > 0 ) {
-      //playing = 3;                   // FIXME: wtf non-semantic 3
+      playing = 3;                   // FIXME: wtf non-semantic 3
       setLED( c.r, c.g, c.b, iledn ); // FIXME: no fading
     }
     else {
