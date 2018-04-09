@@ -37,7 +37,6 @@
 //#define DEBUG_HANDLEMESSAGE
 
 #include "toboot.h"
-
 #include "leuart.h"
 #include "tinyprintf.h"
 #include "ws2812_spi.h"
@@ -59,7 +58,6 @@ extern struct toboot_runtime toboot_runtime;
 TOBOOT_CONFIGURATION( TOBOOT_CONFIG_FLAG_AUTORUN );
 
 
-
 // max number of LEDs
 #define nLEDs 18
 // array of LED data (sent to LEDs)
@@ -71,7 +69,7 @@ static inline void displayLEDs(void);
 
 // global which is active LED
 uint8_t ledn;
-// allocate faders
+// allocate faders, one per LED
 rgbfader_t fader[nLEDs];
 
 #include "color_funcs.h"  // included here becuase it needs setLed()
@@ -95,7 +93,7 @@ uint8_t playstart = 0; // start play position
 uint8_t playend   = patt_max; // end play position
 uint8_t playcount = 0; // number of times to play loop, or 0=infinite
 uint8_t playing; // playing values: 0 = off, 1 = normal, 2 == playing from powerup playing=3 direct led addressing FIXME: this is dumb
-uint8_t do_pattern_write = 0;
+bool doPatternWrite = false;
 
 patternline_t ptmp;  // temp pattern holder
 rgb_t ctmp;      // temp color holder
@@ -142,12 +140,11 @@ const patternline_t patternFlash[patt_maxflash]  __attribute__((section (".patte
  * Note count = 10
  * Total size = 1000 < FLASH_PAGE_SIZE
  */
-uint8_t notesdata[FLASH_PAGE_SIZE] ;
-//uint32_t *notesFlashStartAddress = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
-uint32_t* notesFlashStartAddress  __attribute__ ((used, section(".userNoteSection"))) ;
-
 #define NOTE_SIZE 100
 #define NOTE_COUNT 10
+uint8_t notesdata[FLASH_PAGE_SIZE]; // FIXME: can we do it not in RAM?
+//uint32_t *notesFlashStartAddress = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
+uint32_t* notesFlashStartAddress  __attribute__ ((used, section(".userNoteSection"))) ;
 
 
 // The uptime in milliseconds, maintained by the SysTick timer.
@@ -165,6 +162,7 @@ uint32_t last_misc_millis;
 
 // set by 'G' "gobootload" command
 bool shouldRebootToBootloader = false;
+bool usbHasBeenSetup = false;
 
 // for sending back HID Descriptor in setupCmd
 static void  *hidDescriptor = NULL;
@@ -234,53 +232,62 @@ static void rebootToBootloader() {
   NVIC_SystemReset();    
 }
 
-/**********************************************************************
- * 
- **********************************************************************/
-static void updateMisc()
+
+// --------------------------------------------------------
+
+
+/*********************************
+ *
+ *********************************/
+static void writePatternFlash()
 {
-  if( (uptime_millis - last_misc_millis) > 500 ) {
-    last_misc_millis = uptime_millis;
-    write_char('.');
-
-    if( shouldRebootToBootloader ) {
-      //write_str("rebooting to bootloader...\n");
-      rebootToBootloader();
-      //write_str("why am I still here\n");
-    }
-    
-  }
-  
-  /*
-    // Capture/sample the state of the capacitive touch sensors.
-    CAPSENSE_Sense();
-
-    // Analyse the sample, and if the touch-pads on the green LED side is
-    // touched, rapid blink the green LED ten times.
-    if (CAPSENSE_getPressed(BUTTON0_CHANNEL) &&
-        !CAPSENSE_getPressed(BUTTON1_CHANNEL)) {
-      int i;
-      for (i = 10; i > 0; i--) {
-        GPIO_PinOutClear(gpioPortA, 0);
-        SpinDelay(100);
-        GPIO_PinOutSet(gpioPortA, 0);
-        SpinDelay(100);
-      }
-    // Analyse the same sample, and if the touch-pads on the red LED side is
-    // touched, rapid blink the red LED ten times.
-    } else if (CAPSENSE_getPressed(BUTTON1_CHANNEL) &&
-               !CAPSENSE_getPressed(BUTTON0_CHANNEL)) {
-      int i;
-      for (i = 10; i > 0; i--) {
-        GPIO_PinOutClear(gpioPortB, 7);
-        SpinDelay(100);
-        GPIO_PinOutSet(gpioPortB, 7);
-        SpinDelay(100);
-      }
-    }
-    SpinDelay(500);
-  */
+  write_str("writePatternFlash to be done here");
 }
+
+/*
+ * Save all user notes to flash.
+ */
+static void notesSaveAll()
+{
+  MSC_Init();  // done only in setup?
+  MSC_ErasePage(notesFlashStartAddress); // erase first
+  MSC_WriteWord(notesFlashStartAddress, &notesdata, FLASH_PAGE_SIZE);
+}
+
+/*
+ * Load all user notes from flash to RAM
+ */
+static void notesLoadAll()
+{
+  memcpy( notesdata, notesFlashStartAddress, FLASH_PAGE_SIZE);
+}
+
+/*
+ * Write a note to RAM.
+ * - Uses global 'inbuf'
+ */
+static void noteWrite(uint8_t pos )
+{
+  if( pos >= NOTE_COUNT ) {
+    // error
+    return;
+  }
+  memcpy( notesdata + (pos*NOTE_SIZE), inbuf+3, NOTE_SIZE);
+
+  notesSaveAll(); // FIXME: don't do this every write
+}
+
+/*
+ * Read a user note from RAM into 'reportToSend' buffer.
+ * - Uses global 'reportToSend'
+ */
+static void noteRead(uint8_t pos)
+{
+  memcpy( reportToSend+3, notesdata + (pos*NOTE_SIZE), NOTE_SIZE );
+}
+
+// -----------------------------------------------------------
+
 
 // -------- LED & color pattern handling -------------------------------------
 //
@@ -346,7 +353,7 @@ static void updateLEDs(void)
 
         rgb_updateCurrent();  // playing=3 => direct LED addressing (not anymore)
         displayLEDs();
-#if 0
+#if 1
         // check for non-computer power up
         if( !usbHasBeenSetup ) {
             if( !playing && now > 500 ) {  // 500 msec wait
@@ -390,47 +397,58 @@ static void updateLEDs(void)
     
 }
 
-
-/*
- * Save all user notes to flash.
- */
-static void notesSaveAll()
+/**********************************************************************
+ * Tend to various housekeeping
+ **********************************************************************/
+static void updateMisc()
 {
-  MSC_Init();  // done only in setup?
-  MSC_ErasePage(notesFlashStartAddress); // erase first
-  MSC_WriteWord(notesFlashStartAddress, &notesdata, FLASH_PAGE_SIZE);
-}
+  if( (uptime_millis - last_misc_millis) > 500 ) {
+    last_misc_millis = uptime_millis;
+    write_char('.');
 
-/*
- * Load all user notes from flash to RAM
- */
-static void notesLoadAll()
-{
-  memcpy( notesdata, notesFlashStartAddress, FLASH_PAGE_SIZE);
-}
-
-/*
- * Write a note to RAM.
- * - Uses global 'inbuf'
- */
-static void noteWrite(uint8_t pos )
-{
-  if( pos >= NOTE_COUNT ) {
-    // error
-    return;
+    if( shouldRebootToBootloader ) {
+      rebootToBootloader();  // and now we die
+    }    
   }
-  memcpy( notesdata + (pos*NOTE_SIZE), inbuf+3, NOTE_SIZE);
 
-  notesSaveAll(); // FIXME: don't do this every write
-}
+  if( doPatternWrite ) {
+    doPatternWrite = false;
+    writePatternFlash();
+  }
 
-/*
- * Read a user note from RAM into 'reportToSend' buffer.
- * - Uses global 'reportToSend'
- */
-static void noteRead(uint8_t pos)
-{
-  memcpy( reportToSend+3, notesdata + (pos*NOTE_SIZE), NOTE_SIZE );
+  USBD_State_TypeDef usbState = USBD_GetUsbState();
+  if( usbState == USBD_STATE_CONFIGURED ) {
+    usbHasBeenSetup = true;
+  }
+  
+  /*
+  // Capture/sample the state of the capacitive touch sensors.
+  CAPSENSE_Sense();
+
+    // Analyse the sample, and if the touch-pads on the green LED side is
+    // touched, rapid blink the green LED ten times.
+    if (CAPSENSE_getPressed(BUTTON0_CHANNEL) &&
+        !CAPSENSE_getPressed(BUTTON1_CHANNEL)) {
+      int i;
+      for (i = 10; i > 0; i--) {
+        GPIO_PinOutClear(gpioPortA, 0);
+        SpinDelay(100);
+        GPIO_PinOutSet(gpioPortA, 0);
+        SpinDelay(100);
+      }
+    // Analyse the same sample, and if the touch-pads on the red LED side is
+    // touched, rapid blink the red LED ten times.
+    } else if (CAPSENSE_getPressed(BUTTON1_CHANNEL) &&
+               !CAPSENSE_getPressed(BUTTON0_CHANNEL)) {
+      int i;
+      for (i = 10; i > 0; i--) {
+        GPIO_PinOutClear(gpioPortB, 7);
+        SpinDelay(100);
+        GPIO_PinOutSet(gpioPortB, 7);
+        SpinDelay(100);
+      }
+    }
+  */
 }
 
 
@@ -506,7 +524,8 @@ int main()
   // Enable the USB controller.
   // Remember, this consumes TIMER2 as per -DUSB_TIMER=USB_TIMER2 in Makefile
   // because TIMER0 & TIMER1 are already taken by the capacitive touch sensors.
-  USBD_Init(&initstruct);
+  int rc = USBD_Init(&initstruct);
+  sprintf(dbgstr, "usbd_init rc:%d\n", rc);
 
   // When using a debugger it is practical to uncomment the following three
   // lines to force host to re-enumerate the device.
@@ -537,7 +556,7 @@ int main()
 }
 
 
-/**
+/*
  * handleMessage(char* inbuf) -- main command router
  *
  * inbuf[] is 8 bytes long
@@ -573,7 +592,7 @@ int main()
  *  Server mode tickle       format: { 1, 'D', {1/0},th,tl, {1,0},0, 0 }
  *  Get version              format: { 1, 'v', 0,0,0,        0,0, 0 }
  *
- **/
+ */
 static void handleMessage(uint8_t reportId)
 {
 #ifdef DEBUG_HANDLEMESSAGE
@@ -609,7 +628,7 @@ static void handleMessage(uint8_t reportId)
   //
   else if( cmd == 'n' ) {
     uint8_t iledn = inbuf[7];          // which LED to address
-     playing = 0;
+    playing = 0;
     if( iledn > 0 ) {
       playing = 3;                   // FIXME: wtf non-semantic 3
       setLED( c.r, c.g, c.b, iledn ); // FIXME: no fading
@@ -671,10 +690,6 @@ static void handleMessage(uint8_t reportId)
     if( pos >= patt_max ) pos = 0;  // just in case
     // save pattern line to RAM
     memcpy( &pattern[pos], &ptmp, sizeof(patternline_t) );
-    //if( pos == (patt_max-1) ) {  // NOTE: writing last position causes write to flash
-    //do_pattern_write = 1;
-    //writePatternFlash();
-    //}    
   }
   //
   // Read color pattern entry - {1,'R', 0,0,0, 0,0, pos}
@@ -691,10 +706,17 @@ static void handleMessage(uint8_t reportId)
     reportToSend[7] = patt.ledn;
   }
   //
-  // Write color pattern to flash memory: { 1, 'W', 0x55,0xAA, 0xCA,0xFE, 0,0}
+  // Save color pattern to flash memory: { 1, 'W', 0x55,0xAA, 0xCA,0xFE, 0,0}
   //
   else if( cmd == 'W' ) {
-    
+    // FIXME: why doesn't this extra check work?
+    // because it was off by One?
+    if( inbuf[2] == 0xBE &&
+        inbuf[3] == 0xEF &&
+        inbuf[4] == 0xCA &&
+        inbuf[5] == 0xFE ) {
+      doPatternWrite = true;
+    }
   }
   //
   // Set ledn : { 1, 'l', n, 0...}
@@ -703,10 +725,26 @@ static void handleMessage(uint8_t reportId)
     ledn = inbuf[2];
   }
   //
-  //  Server mode tickle      - { 1, 'D', {1/0}, th,tl, {1,0}, sp, ep }
+  //  Server mode tickle        format: { 1, 'D', {1/0}, th,tl, {1,0}, sp, ep }
   //
   else if( cmd == 'D' ) {
+    uint8_t serverdown_on = inbuf[2];
+    uint16_t t = ((uint16_t)inbuf[3] << 8) | inbuf[4];
+    uint8_t st = inbuf[5];
+    playstart  = inbuf[6];
+    playend    = inbuf[7];
+    if( playend == 0 || playend > patt_max )
+      playend = patt_max;
     
+    if( serverdown_on ) {
+      serverdown_millis = t;
+      serverdown_update_next = uptime_millis + (t*10);
+    } else {
+      serverdown_millis = 0; // turn off serverdown mode
+    }
+    if( st == 0 ) {   // agreed, confusing
+      off();
+    }
   }
   //
   //  Get version               format: { 1, 'v', 0,0,0,        0,0, 0 }
@@ -753,7 +791,7 @@ static void handleMessage(uint8_t reportId)
   
 }
 
-/**************************************************************************//**
+/****************************************************************************
  * @brief
  *   Callback function called when the data stage of a USB_HID_SET_REPORT
  *   setup command has completed.
@@ -795,7 +833,7 @@ static int Report2Received(USB_Status_TypeDef status, uint32_t xferred, uint32_t
   return USB_STATUS_OK;
 }
 
-/**************************************************************************//**
+/******************************************************************************
  * @brief
  *   Handle USB setup commands. Implements HID class specific commands.
  *   This function must be called each time the device receive a setup command.
