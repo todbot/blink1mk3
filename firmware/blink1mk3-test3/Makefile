@@ -143,5 +143,8 @@ program-openocd:
 size:
 	arm-none-eabi-size  $(TARGET).elf
 
+nm:
+	arm-none-eabi-nm -n $(TARGET).elf 
+
 dfu:
 	dfu-util -v --device 1209:70b1 --download $(TARGET).bin
