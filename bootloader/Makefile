@@ -13,7 +13,7 @@ prep-submodule:
   fi
 
 prep: prep-submodule
-	cp toboot-blink1.c tomu-bootloader/toboot
+	cp toboot-main-blink1.c tomu-bootloader/toboot
 	cp Makefile.toboot-blink1.mk tomu-bootloader/toboot
 
 build: prep

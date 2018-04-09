@@ -27,7 +27,7 @@ LFLAGS     = $(ADD_LFLAGS) $(CFLAGS) \
 OBJ_DIR    = .obj
 
 CSOURCES   = $(wildcard *.c)
-CSOURCES  := $(filter-out toboot.c, $(CSOURCES)) # disable standard toboot
+CSOURCES  := $(filter-out main.c, $(CSOURCES)) # disable standard toboot
 CPPSOURCES = $(wildcard *.cpp)
 ASOURCES   = $(wildcard *.S)
 COBJS      = $(addprefix $(OBJ_DIR)/, $(notdir $(CSOURCES:.c=.o)))
