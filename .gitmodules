@@ -1,3 +1,4 @@
 [submodule "bootloader/tomu-bootloader"]
 	path = bootloader/tomu-bootloader
 	url = https://github.com/todbot/tomu-bootloader
+  ignore = untracked 
