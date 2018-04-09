@@ -3,7 +3,7 @@
 #
 #
 
-.PHONY: all build prep prep-submodule clean distclean
+.PHONY: all build prep prep-submodule clean distclean booster-build
 
 all: build 
 
@@ -18,9 +18,17 @@ prep: prep-submodule
 
 build: prep
 	make -C tomu-bootloader/toboot -f Makefile.toboot-blink1.mk
+	cp tomu-bootloader/toboot/toboot-blink1.bin .
 
 clean:
 	make -C tomu-bootloader/toboot -f Makefile.toboot-blink1.mk clean
 
 distclean: clean
 	echo "distclean"
+
+booster-build:
+	cd tomu-bootloader/booster && make && gcc make-booster.c -o make-booster && cd ..
+
+booster:
+	cd tomu-bootloader/booster && ./make-booster ../toboot/toboot-blink1.bin ../../toboot-blink1-booster.bin
+#	./tomu-bootloader/booster/make-booster ./tomu-bootloader/toboot/toboot-blink1.bin ./toboot-blink1-booster.bin
