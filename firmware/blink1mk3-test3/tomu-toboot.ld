@@ -11,7 +11,10 @@
 
 MEMORY
 {
-  FLASH (rx) : ORIGIN = 0x00004000, LENGTH = 64k - 16k  /* Flash: 16k reserved for tomubootloader */
+  /*  FLASH (rx) : ORIGIN = 0x00004000, LENGTH = 64k - 16k /* Flash: 16k reserved for tomubootloader */
+  FLASH (rx) : ORIGIN = 0x00004000, LENGTH = 64k - 16k - (2*1k) /* Flash: 16k reserved for tomubootloader */
+  FLASHP (r) : ORIGIN = 0x0000f800, LENGTH = 1k /* flash region for color patterns */
+  FLASHN (r) : ORIGIN = 0x0000fC00, LENGTH = 1k /* flash region for user notes */
   RAM (rwx)  : ORIGIN = 0x20000000 + 8, LENGTH = 0x2000 - 8  /* RAM: 8k - 8 tomu bytes*/
 }
 
@@ -51,6 +54,10 @@ ENTRY(Reset_Handler)
 
 SECTIONS
 {
+  .patternFlashSection : {
+      *(.patternFlashSection)
+  } >FLASHP
+  
   .text :
   {
 		KEEP(SORT(*)(.vectors))
@@ -80,8 +87,8 @@ SECTIONS
   } > FLASH
   
   /* flash segements are 1024 bytes big */
-  userNotesSection  = ORIGIN(FLASH) + LENGTH(FLASH) - 1024;
-  patternSection    = ORIGIN(FLASH) + LENGTH(FLASH) - (2*1024);
+  /*  patternFlashSection    = ORIGIN(FLASH) + LENGTH(FLASH) - (2*1024); */
+  userNotesFlash  = ORIGIN(FLASH) + LENGTH(FLASH) - 1024;
 
   .ARM.extab :
   {

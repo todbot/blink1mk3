@@ -12,11 +12,13 @@
  *
  ********************************************************************************************/
 
-#include <stdint.h>
-#include <stdbool.h>
-
 #include "capsense.h"
 #include "usbconfig.h"
+
+#include <em_core.h>
+#include <em_msc.h>
+#include <em_usart.h>
+#include <em_leuart.h>
 #include "em_chip.h"
 #include "em_cmu.h"
 #include "em_device.h"
@@ -25,10 +27,10 @@
 #include "em_usb.h"
 #include "em_wdog.h"
 #include "em_system.h"
-#include <em_leuart.h>
-#include <em_usart.h>
-#include <em_core.h>
-#include <em_msc.h>
+
+#include <stdint.h>
+#include <stdbool.h>
+
 
 #define BOARD_TYPE_BLINK1MK3
 //#define BOARD_TYPE_TOMU 
@@ -50,12 +52,12 @@
 
 extern struct toboot_runtime toboot_runtime;
 /* Declare support for Toboot V2 */
-/* To enable Toboot to run when you first plug in Tomu, pass
+/* To enable your code to run when you first plug in Tomu, pass
  * TOBOOT_CONFIG_FLAG_AUTORUN to this macro.  Otherwise, leave the
  * configuration value at 0 to use the defaults.
  */
-TOBOOT_CONFIGURATION(0);
-//TOBOOT_CONFIGURATION( TOBOOT_CONFIG_FLAG_AUTORUN );
+//TOBOOT_CONFIGURATION(0);
+TOBOOT_CONFIGURATION( TOBOOT_CONFIG_FLAG_AUTORUN );
 // Note: Must also set "toboot_runtime.boot_count = 0"
 // to prevent bootloader from running after 3 power-cycles
 // Because apparently the RAM gets enough power to stay alive?x
@@ -68,6 +70,7 @@ rgb_t leds[nLEDs];
 static void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n);
 #define setLEDsAll(r,g,b) { setLED(r,g,b, 255); } // 255 means all
 static inline void displayLEDs(void);
+static void off();
 
 // global which is active LED
 uint8_t ledn;
@@ -106,15 +109,20 @@ uint8_t ledn;    // temp ledn holder
 patternline_t pattern[patt_max]; 
 
 /*
- * non-volatile color pattern
+ * Flash / non-volatile color pattern
  *
- * 6 bytes / patternline = 21.3 pattern lines (fade is 2bytes)
+ * 6 bytes / patternline (fade is 2bytes)
+ * => 1024 bytes / 6 = 170 pattern lines potentially (or 10 16-line patterns =960 bytes)
  *
  * FLASH_PAGE_SIZE = 1024 in Gecko_SDK/platform/Device/SiliconLabs/EFM32HG/Include/efm32hg309f64.h
  * FLASH_SIZE = 65536 (64k)
  * .patternSection is in flash at address 0xf800 (64k - (2*1k)) 
  */
-const patternline_t patternFlash[patt_maxflash]  __attribute__((section (".patternSection"))) = 
+
+//uint32_t *patterFlashAddress = (uint32_t *)(FLASH_SIZE - (2*FLASH_PAGE_SIZE));
+
+__attribute__ ((section(".patternFlashSection")))
+const patternline_t patternFlash[] = 
 {
     //    G     R     B    fade ledn
     { { 0x00, 0xff, 0x00 },  50, 1 }, // 0  red A
@@ -144,9 +152,9 @@ const patternline_t patternFlash[patt_maxflash]  __attribute__((section (".patte
  */
 #define NOTE_SIZE 100
 #define NOTE_COUNT 10
-uint8_t notesdata[FLASH_PAGE_SIZE]; // FIXME: can we do it not in RAM?
+uint8_t userNotesData[FLASH_PAGE_SIZE]; // FIXME: can we do it not in RAM?
 //uint32_t *notesFlashStartAddress = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
-uint32_t* notesFlashStartAddress  __attribute__ ((used, section(".userNoteSection"))) ;
+const uint8_t userNotesFlash[FLASH_PAGE_SIZE];
 
 
 // The uptime in milliseconds, maintained by the SysTick timer.
@@ -165,6 +173,8 @@ uint32_t last_misc_millis;
 // set by 'G' "gobootload" command
 bool shouldRebootToBootloader = false;
 bool usbHasBeenSetup = false;
+USBD_State_TypeDef usbState;
+// usbState: '5' is CONFIGURED, '3' is DEFAULT.  See em_usb.h
 
 // for sending back HID Descriptor in setupCmd
 static void  *hidDescriptor = NULL;
@@ -223,7 +233,6 @@ static void SpinDelay(uint32_t millis) {
   while (uptime_millis < sleep_until);
 }
 
-static void off();
 /* Set Toboot magic value to force bootloader and reset */
 static void rebootToBootloader() {
   toboot_runtime.magic = TOBOOT_FORCE_ENTRY_MAGIC;
@@ -243,7 +252,17 @@ static void rebootToBootloader() {
  *********************************/
 static void writePatternFlash()
 {
-  write_str("writePatternFlash to be done here");
+  CORE_DECLARE_IRQ_STATE;
+  write_str("writePatternFlash");
+ 
+  CORE_ENTER_ATOMIC();
+  MSC->LOCK = MSC_UNLOCK_CODE;
+  //MSC_ErasePage((uint32_t*)0xf800); // erase first
+  MSC_ErasePage((uint32_t*)patternFlash); // erase first
+  MSC_WriteWord((uint32_t*)patternFlash, &pattern, FLASH_PAGE_SIZE);
+  MSC->LOCK = 0;
+  CORE_EXIT_ATOMIC();
+  write_str("done");
 }
 
 /*
@@ -252,8 +271,8 @@ static void writePatternFlash()
 static void notesSaveAll()
 {
   MSC_Init();  // done only in setup?
-  MSC_ErasePage(notesFlashStartAddress); // erase first
-  MSC_WriteWord(notesFlashStartAddress, &notesdata, FLASH_PAGE_SIZE);
+  MSC_ErasePage((uint32_t*)userNotesFlash); // erase first
+  MSC_WriteWord((uint32_t*)userNotesFlash, &userNotesData, FLASH_PAGE_SIZE);
 }
 
 /*
@@ -261,7 +280,7 @@ static void notesSaveAll()
  */
 static void notesLoadAll()
 {
-  memcpy( notesdata, notesFlashStartAddress, FLASH_PAGE_SIZE);
+  memcpy( userNotesData, userNotesFlash, FLASH_PAGE_SIZE);
 }
 
 /*
@@ -274,7 +293,7 @@ static void noteWrite(uint8_t pos )
     // error
     return;
   }
-  memcpy( notesdata + (pos*NOTE_SIZE), inbuf+3, NOTE_SIZE);
+  memcpy( userNotesData + (pos*NOTE_SIZE), inbuf+3, NOTE_SIZE);
 
   notesSaveAll(); // FIXME: don't do this every write
 }
@@ -285,7 +304,7 @@ static void noteWrite(uint8_t pos )
  */
 static void noteRead(uint8_t pos)
 {
-  memcpy( reportToSend+3, notesdata + (pos*NOTE_SIZE), NOTE_SIZE );
+  memcpy( reportToSend+3, userNotesData + (pos*NOTE_SIZE), NOTE_SIZE );
 }
 
 // -----------------------------------------------------------
@@ -406,19 +425,26 @@ static void updateMisc()
 {
   if( (uptime_millis - last_misc_millis) > 500 ) {
     last_misc_millis = uptime_millis;
-    write_char('.');
+    //write_char('.');
+    //write_char('0'+usbState);
+    // print out heartbeats that are also our USB state:
+    // '.' == connected to computer
+    // ':' == powered but no computer
+    // a number is another USBD_State_TypeDef
+    write_char((usbState==USBD_STATE_CONFIGURED) ? '.' : (usbState==USBD_STATE_DEFAULT) ? ':': 0+usbState);
 
     if( shouldRebootToBootloader ) {
       rebootToBootloader();  // and now we die
-    }    
+    }
+    
+    if( doPatternWrite ) {
+      doPatternWrite = false;
+      writePatternFlash();
+    }
   }
 
-  if( doPatternWrite ) {
-    doPatternWrite = false;
-    writePatternFlash();
-  }
 
-  USBD_State_TypeDef usbState = USBD_GetUsbState();
+  usbState = USBD_GetUsbState();
   if( usbState == USBD_STATE_CONFIGURED ) {
     usbHasBeenSetup = true;
   }
@@ -501,6 +527,8 @@ int main()
     while (1);
   }
 
+  MSC_Init();  // Set up flash controller so we can do writes later
+
   setupLeuart();
 
   write_str("blink1mk3-test3 startup...\n");
@@ -512,7 +540,7 @@ int main()
 
   ws2812_setupSpi();
   
-  // load pattern from flash to RAM
+  // Load pattern from flash to RAM
   memset( pattern, 0, sizeof(patternline_t)*patt_max); // zero out just in case
   memcpy( pattern, patternFlash, sizeof(patternline_t)*patt_maxflash);
 
@@ -533,6 +561,7 @@ int main()
   // because TIMER0 & TIMER1 are already taken by the capacitive touch sensors.
   int rc = USBD_Init(&initstruct);
   sprintf(dbgstr, "usbd_init rc:%d\n", rc);
+  write_str(dbgstr);
 
   // When using a debugger it is practical to uncomment the following three
   // lines to force host to re-enumerate the device.
