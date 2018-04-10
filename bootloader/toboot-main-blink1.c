@@ -3,6 +3,12 @@
 #include "toboot-internal.h"
 #include "mcu.h"
 
+// this bootloader is for blink(1) devices
+// main differences:
+// - "button press" is by shorting PF1 & PF0 (SWDIO & SWDCLK)
+// - no red/green LEDs
+#define BOARD_TYPE_BLINK1
+
 #define AUTOBAUD_TIMER_CLOCK CMU_HFPERCLKEN0_TIMER0
 #define BOOTLOADER_USART_CLOCKEN 0
 
@@ -18,11 +24,24 @@ void RTC_Handler(void)
     // Clear interrupt flag
     RTC->IFC = RTC_IFC_COMP1 | RTC_IFC_COMP0 | RTC_IFC_OF;
 
+#ifdef BOARD_TYPE_BLINK1
+
+    // FIXME: eventually do ws2812 leds
+    
     // Toggle the green LED
     GPIO->P[0].DOUTTGL = (1 << 0);
 
     // Also toggle the red LED, to make a pattern of flashing lights.
     GPIO->P[1].DOUTTGL = (1 << 7);
+
+#else
+    // Toggle the green LED
+    GPIO->P[0].DOUTTGL = (1 << 0);
+
+    // Also toggle the red LED, to make a pattern of flashing lights.
+    GPIO->P[1].DOUTTGL = (1 << 7);
+#endif
+    
 }
 
 /**************************************************************************/ /**
@@ -84,6 +103,17 @@ void __early_init(void)
     while ((CMU->STATUS & CMU_STATUS_HFRCOSEL) == 0)
         ;
 
+#ifdef BOARD_TYPE_BLINK1
+    // FIXME: change this to be set up ws2812 LEDs
+    GPIO->P[0].MODEL &= ~_GPIO_P_MODEL_MODE0_MASK;
+    GPIO->P[0].MODEL |= GPIO_P_MODEL_MODE0_WIREDAND;
+    GPIO->P[0].DOUTSET = (1 << 0);
+
+    // Mux PB7 (Red LED)
+    GPIO->P[1].MODEL &= ~_GPIO_P_MODEL_MODE7_MASK;
+    GPIO->P[1].MODEL |= GPIO_P_MODEL_MODE7_WIREDAND;
+    GPIO->P[1].DOUTCLR = (1 << 7);
+#else
     // Mux things
     // Mux PA0 (Green LED)
     GPIO->P[0].MODEL &= ~_GPIO_P_MODEL_MODE0_MASK;
@@ -94,7 +124,8 @@ void __early_init(void)
     GPIO->P[1].MODEL &= ~_GPIO_P_MODEL_MODE7_MASK;
     GPIO->P[1].MODEL |= GPIO_P_MODEL_MODE7_WIREDAND;
     GPIO->P[1].DOUTCLR = (1 << 7);
-
+#endif
+    
     // Set up the watchdog to reboot us after 15 ms.
     WDOG->CTRL |= WDOG_CTRL_EN;
     while (WDOG->SYNCBUSY & _WDOG_SYNCBUSY_MASK)
@@ -125,8 +156,12 @@ static void busy_wait(int count)
         asm("nop");
 }
 
-#define READ_CAP0B() (GPIO->P[4].DIN & (1 << 12))
-#define TOGGLE_CAP1A() (GPIO->P[2].DOUTTGL = (1 << 1))
+// for standard Tomu
+#define READ_CAP0B() (GPIO->P[4].DIN & (1 << 12))      // PE12
+#define TOGGLE_CAP1A() (GPIO->P[2].DOUTTGL = (1 << 1)) // PC1
+// for BOARD_TYPE_BLINK1
+#define READ_SWDCLK() (GPIO->P[5].DIN & (1 << 0))   // PF0 == SWDCLK
+#define TOGGLE_SWDIO() (GPIO->P[5].DOUTGL = (1<<1)) // PF1 == SWDIO
 
 int test_pin_short(const struct toboot_configuration *cfg)
 {
@@ -140,6 +175,34 @@ int test_pin_short(const struct toboot_configuration *cfg)
     {
         return 0;
     }
+
+#ifdef BOART_TYPE_BLINK1
+
+    // Mux PF1 (output)
+    GPIO->P[5].MODEL &= ~_GPIO_P_MODEL_MODE1_MASK;
+    GPIO->P[5].MODEL |= GPIO_P_MODEL_MODE1_PUSHPULL;
+    // Mux PF0 (input)
+    GPIO->P[5].MODEH &= ~_GPIO_P_MODEH_MODE0_MASK;
+    GPIO->P[5].MODEH |= GPIO_P_MODEH_MODE0_INPUTPULL;
+    busy_wait(20);
+
+    GPIO->P[5].DOUTSET = (1 << 1); // Set PF1 SWDIO high
+    busy_wait(15);
+    samples[0] = READ_SWDCLK();    // Read PF0 SWDCLK 
+
+    TOGGLE_SWDIO();
+    busy_wait(15);
+    samples[1] = READ_SWDCLK();
+
+    TOGGLE_SWDIO();
+    busy_wait(15);
+    samples[2] = READ_SWDCLK();
+
+    TOGGLE_SWDIO();
+    busy_wait(15);
+    samples[2] = READ_SWDCLK();
+
+#else
 
     // Mux PC1 (Outer edge pad)
     GPIO->P[2].MODEL &= ~_GPIO_P_MODEL_MODE1_MASK;
@@ -165,6 +228,8 @@ int test_pin_short(const struct toboot_configuration *cfg)
     TOGGLE_CAP1A();
     busy_wait(15);
     samples[3] = READ_CAP0B();
+
+#endif
 
     if (samples[0] && (!samples[1]) && samples[2] && (!samples[3]))
         return 1;
@@ -240,7 +305,11 @@ static int should_enter_bootloader(const struct toboot_configuration *cfg)
     if (test_reset_cause(cfg))
     {
         bootloader_reason = COLD_BOOT_CONFIGURATION_FLAG;
-        //return 1;
+#ifdef BOARD_TYPE_BLINK1
+        // don't return because test_reset_cause() seems to have problems? FIXME: revisit this
+#else
+        return 1;
+#endif        
     }
 
     // If the special magic number is present, enter the bootloader
@@ -321,6 +390,12 @@ __attribute__((noreturn)) static void boot_app(void)
     GPIO->P[4].MODEH = _GPIO_P_MODEH_RESETVALUE;
     GPIO->P[2].DOUTSET = _GPIO_P_DOUTSET_RESETVALUE;
     GPIO->P[4].DOUTSET = _GPIO_P_DOUTSET_RESETVALUE;
+
+#ifdef BOARD_TYPE_BLINK1
+    GPIO->P[6].MODEL = _GPIO_P_MODEL_RESETVALUE;
+    GPIO->P[6].MODEH = _GPIO_P_MODEH_RESETVALUE;
+    GPIO->P[6].DOUTSET = _GPIO_P_DOUTSET_RESETVALUE;
+#endif    
 
     // Refresh watchdog right before launching app
     watchdog_refresh();
