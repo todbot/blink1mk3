@@ -50,13 +50,15 @@
 
 extern struct toboot_runtime toboot_runtime;
 /* Declare support for Toboot V2 */
-/* To enable this program to run when you first plug in Tomu, pass
+/* To enable Toboot to run when you first plug in Tomu, pass
  * TOBOOT_CONFIG_FLAG_AUTORUN to this macro.  Otherwise, leave the
  * configuration value at 0 to use the defaults.
  */
-//TOBOOT_CONFIGURATION(0);
-TOBOOT_CONFIGURATION( TOBOOT_CONFIG_FLAG_AUTORUN );
-
+TOBOOT_CONFIGURATION(0);
+//TOBOOT_CONFIGURATION( TOBOOT_CONFIG_FLAG_AUTORUN );
+// Note: Must also set "toboot_runtime.boot_count = 0"
+// to prevent bootloader from running after 3 power-cycles
+// Because apparently the RAM gets enough power to stay alive?x
 
 // max number of LEDs
 #define nLEDs 18
@@ -501,10 +503,15 @@ int main()
 
   setupLeuart();
 
+  write_str("blink1mk3-test3 startup...\n");
+  sprintf(dbgstr, "toboot_runtime: count:%d model:%x\n",
+          toboot_runtime.boot_count, toboot_runtime.board_model);
+  write_str(dbgstr);
+  toboot_runtime.boot_count = 0; // reset boot count to say we live
+  // FIXME: how is the toboot_runtime RAM being preserved on power cycle?
+
   ws2812_setupSpi();
   
-  write_str("blink1mk3-test2 startup...\n");
-
   // load pattern from flash to RAM
   memset( pattern, 0, sizeof(patternline_t)*patt_max); // zero out just in case
   memcpy( pattern, patternFlash, sizeof(patternline_t)*patt_maxflash);
