@@ -5,7 +5,7 @@
 
 .PHONY: all build prep prep-submodule clean distclean booster-build
 
-all: build 
+all: build booster-build booster
 
 prep-submodule:
 	@if [ ! -d tomu-bootloader ]; then \
