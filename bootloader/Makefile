@@ -8,7 +8,7 @@
 all: build booster-build booster
 
 prep-submodule:
-	@if [ ! -d tomu-bootloader ]; then \
+	@if [ ! -d tomu-bootloader/toboot ]; then \
 		git submodule update --init ; \
   fi
 
