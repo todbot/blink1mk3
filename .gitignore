@@ -45,3 +45,6 @@ eagle.epf
 # binary build products
 *.bin
 *.elf
+
+# tod stuf
+*.bak
