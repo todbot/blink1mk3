@@ -44,7 +44,7 @@ LSCRIPT = ./tomu-toboot.ld
 #
 # PHONY TARGETS
 #
-.PHONY: all $(TARGET) check clean size
+.PHONY: all $(TARGET) check clean size nm program-jlink program-openocd program-dfu
 
 all: $(TARGET) size
 
@@ -133,12 +133,22 @@ $(TARGET).bin: $(TARGET).elf
 	$(Q_OBJCOPY)$(OBJCOPY) -O binary $< $@
 
 
+####################################################
+#
+# Programming targets
+#
+
 program-jlink:
-	cp $(TARGET).bin jlinkup.bin
-	jlinkexe -commanderscript ../jlinkscript.txt
+	echo "loadbin $(TARGET).bin,0x4000 \ngo\nexit\n" > jlink-tmp.txt
+	jlinkexe -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
+	rm jlink-tmp.txt
 
 program-openocd:
-	openocd -f ../openocd.cfg -c "program $(TARGET).elf verify reset exit"
+	openocd -f ../openocd.cfg -c "program $(TARGET).bin verify reset exit 0x4000"
+
+# uses ThingM blink(1) DFU VID:PID
+program-dfu:
+	dfu-util -v --device 27B8:01EE --download $(TARGET).bin
 
 size:
 	arm-none-eabi-size  $(TARGET).elf
@@ -146,5 +156,3 @@ size:
 nm:
 	arm-none-eabi-nm -n $(TARGET).elf 
 
-dfu:
-	dfu-util -v --device 1209:70b1 --download $(TARGET).bin
