@@ -3,7 +3,7 @@
 #
 #
 
-.PHONY: all build prep prep-submodule clean distclean booster-build
+.PHONY: all build prep prep-submodule clean distclean booster-build size
 
 all: build booster-build booster
 
@@ -34,8 +34,17 @@ booster:
 	cd tomu-bootloader/booster && ./make-booster ../toboot/toboot-blink1.bin ../../toboot-blink1-booster.bin
 #	./tomu-bootloader/booster/make-booster ./tomu-bootloader/toboot/toboot-blink1.bin ./toboot-blink1-booster.bin
 
-# FIXME: use ThingM blink(1) bootloader VID/PID
+# Uses ThingM blink(1) DFU bootloader VID/PID
 dfu-booster:
-	dfu-util -v --device 1209:70b1 --download toboot-blink1-booster.bin
+	dfu-util -v --device 27B8:01EE --download toboot-blink1-booster.bin
 
+program-openocd:
+	openocd -f ../firmware/openocd.cfg -c 'program toboot-blink1.bin verify reset exit'
 
+program-jlink:
+	echo "loadbin toboot-blink1.bin,0 \nr \ngo" > jlink-tmp.txt
+	jlinkexe -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
+	rm jlink-tmp.txt
+
+size:
+	arm-none-eabi-size ./tomu-bootloader/toboot/toboot-blink1.elf
