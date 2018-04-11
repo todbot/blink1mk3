@@ -50,8 +50,8 @@ struct device_req {
 
 
 #define NUM_USB_BUFFERS           8
-#define VENDOR_ID                 0x1209    // pid.codes
-#define PRODUCT_ID                0x70b1    // Assigned to Tomu project
+#define VENDOR_ID                 0x27b8    // ThingM Vendor Id
+#define PRODUCT_ID                0x01EE    // ThingM blink(1) DFU Product Id
 #define DEVICE_VER                0x0101    // Bootloader version
 #define MANUFACTURER_NAME         {'T','h','i','n','g','M'} //u"ThingM"  // FIXME: why can't I use the "u" notation?
 #define MANUFACTURER_NAME_LEN     (7-1)
