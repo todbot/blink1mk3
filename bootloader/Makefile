@@ -42,7 +42,7 @@ program-openocd:
 	openocd -f ../firmware/openocd.cfg -c 'program toboot-blink1.bin verify reset exit'
 
 program-jlink:
-	echo "loadbin toboot-blink1.bin,0 \nr \ngo" > jlink-tmp.txt
+	echo "loadbin toboot-blink1.bin,0 \nr \nexit\n" > jlink-tmp.txt
 	jlinkexe -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
 	rm jlink-tmp.txt
 
