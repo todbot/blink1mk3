@@ -19,14 +19,14 @@
 #include <em_msc.h>
 #include <em_usart.h>
 #include <em_leuart.h>
-#include "em_chip.h"
-#include "em_cmu.h"
-#include "em_device.h"
-#include "em_emu.h"
-#include "em_gpio.h"
-#include "em_usb.h"
-#include "em_wdog.h"
-#include "em_system.h"
+#include <em_chip.h>
+#include <em_cmu.h>
+#include <em_device.h>
+#include <em_emu.h>
+#include <em_gpio.h>
+#include <em_usb.h>
+#include <em_wdog.h>
+#include <em_system.h>
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -36,6 +36,7 @@
 //#define BOARD_TYPE_TOMU 
 //#define BOARD_TYPE_EFM32HGDEVKIT
 
+// define this to print out cmd+args in handleMessage()
 //#define DEBUG_HANDLEMESSAGE
 
 #include "toboot.h"
@@ -56,8 +57,9 @@ extern struct toboot_runtime toboot_runtime;
  * TOBOOT_CONFIG_FLAG_AUTORUN to this macro.  Otherwise, leave the
  * configuration value at 0 to use the defaults.
  */
-//TOBOOT_CONFIGURATION(0);
-TOBOOT_CONFIGURATION( TOBOOT_CONFIG_FLAG_AUTORUN );
+TOBOOT_CONFIGURATION(0);
+//TOBOOT_CONFIGURATION( TOBOOT_CONFIG_FLAG_AUTORUN );
+//
 // Note: Must also set "toboot_runtime.boot_count = 0"
 // to prevent bootloader from running after 3 power-cycles
 // Because apparently the RAM gets enough power to stay alive?x
@@ -114,33 +116,31 @@ patternline_t pattern[patt_max];
  * 6 bytes / patternline (fade is 2bytes)
  * => 1024 bytes / 6 = 170 pattern lines potentially (or 10 16-line patterns =960 bytes)
  *
- * FLASH_PAGE_SIZE = 1024 in Gecko_SDK/platform/Device/SiliconLabs/EFM32HG/Include/efm32hg309f64.h
+ * FLASH_PAGE_SIZE = 1024 (Gecko_SDK/platform/Device/SiliconLabs/EFM32HG/Include/efm32hg309f64.h)
  * FLASH_SIZE = 65536 (64k)
- * .patternSection is in flash at address 0xf800 (64k - (2*1k)) 
+ * .patternFlashSection is in flash at address 0xfc00 (64k - (1*1k)) 
  */
-
 //uint32_t *patterFlashAddress = (uint32_t *)(FLASH_SIZE - (2*FLASH_PAGE_SIZE));
-
 __attribute__ ((section(".patternFlashSection")))
 const patternline_t patternFlash[] = 
 {
     //    G     R     B    fade ledn
-    { { 0x00, 0xff, 0x00 },  50, 1 }, // 0  red A
-    { { 0x00, 0xff, 0x00 },  50, 2 }, // 1  red B
-    { { 0x00, 0x00, 0x00 },  50, 0 }, // 2  off both
-    { { 0xff, 0x00, 0x00 },  50, 1 }, // 3  grn A
-    { { 0xff, 0x00, 0x00 },  50, 2 }, // 4  grn B
-    { { 0x00, 0x00, 0x00 },  50, 0 }, // 5  off both
-    { { 0x00, 0x00, 0xff },  50, 1 }, // 6  blu A
-    { { 0x00, 0x00, 0xff },  50, 2 }, // 7  blu B
-    { { 0x00, 0x00, 0x00 },  50, 0 }, // 8  off both
-    { { 0x80, 0x80, 0x80 }, 100, 0 }, // 9  half-bright, both LEDs
-    { { 0x00, 0x00, 0x00 }, 100, 0 }, // 10 off both
-    { { 0xff, 0xff, 0xff },  50, 1 }, // 11 white A
-    { { 0x00, 0x00, 0x00 },  50, 1 }, // 12 off A
-    { { 0xff, 0xff, 0xff },  50, 2 }, // 13 white B
-    { { 0x00, 0x00, 0x00 }, 100, 2 }, // 14 off B
-    { { 0x00, 0x00, 0x00 }, 100, 0 }, // 15 off everyone
+  { { 0x00, 0xff, 0x00 },  50, 1 }, // 0  red A
+  { { 0x00, 0xff, 0x00 },  50, 2 }, // 1  red B
+  { { 0x00, 0x00, 0x00 },  50, 0 }, // 2  off both
+  { { 0xff, 0x00, 0x00 },  50, 1 }, // 3  grn A
+  { { 0xff, 0x00, 0x00 },  50, 2 }, // 4  grn B
+  { { 0x00, 0x00, 0x00 },  50, 0 }, // 5  off both
+  { { 0x00, 0x00, 0xff },  50, 1 }, // 6  blu A
+  { { 0x00, 0x00, 0xff },  50, 2 }, // 7  blu B
+  { { 0x00, 0x00, 0x00 },  50, 0 }, // 8  off both
+  { { 0x80, 0x80, 0x80 }, 100, 0 }, // 9  half-bright, both LEDs
+  { { 0x00, 0x00, 0x00 }, 100, 0 }, // 10 off both
+  { { 0xff, 0xff, 0xff },  50, 1 }, // 11 white A
+  { { 0x00, 0x00, 0x00 },  50, 1 }, // 12 off A
+  { { 0xff, 0xff, 0xff },  50, 2 }, // 13 white B
+  { { 0x00, 0x00, 0x00 }, 100, 2 }, // 14 off B
+  { { 0x00, 0x00, 0x00 }, 100, 0 }, // 15 off everyone
 };
 
 /*
@@ -148,13 +148,26 @@ const patternline_t patternFlash[] =
  *
  * Note size = 100
  * Note count = 10
- * Total size = 1000 < FLASH_PAGE_SIZE
+ * Total size = 1000 < FLASH_PAGE_SIZE = 1024
+ * .userNotesFlashSection is in flash at address 0xf800 (64k - (2*1k)) 
  */
 #define NOTE_SIZE 100
 #define NOTE_COUNT 10
-uint8_t userNotesData[FLASH_PAGE_SIZE]; // FIXME: can we do it not in RAM?
+// what is in a note
+typedef struct {
+  char note[NOTE_SIZE];  // just a string for now
+} usernote_t;
+
+// In-memory copy of nonvolatile notes
+usernote_t userNotes[NOTE_COUNT];
+//uint8_t userNotesData[NOTE_SIZE*NOTE_COUNT]; // FIXME: can we do it not in RAM?
 //uint32_t *notesFlashStartAddress = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
-const uint8_t userNotesFlash[FLASH_PAGE_SIZE];
+//uint32_t *userNotesFlash = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
+__attribute__ ((section(".userNotesFlashSection")))
+const usernote_t userNotesFlash[] = {
+  {"this is a test note"},
+  {"here is another test note"}
+};
 
 
 // The uptime in milliseconds, maintained by the SysTick timer.
@@ -172,9 +185,8 @@ uint32_t last_misc_millis;
 
 // set by 'G' "gobootload" command
 bool shouldRebootToBootloader = false;
+bool doNotesWrite = false;
 bool usbHasBeenSetup = false;
-USBD_State_TypeDef usbState;
-// usbState: '5' is CONFIGURED, '3' is DEFAULT.  See em_usb.h
 
 // for sending back HID Descriptor in setupCmd
 static void  *hidDescriptor = NULL;
@@ -219,121 +231,123 @@ static const USBD_Init_TypeDef initstruct =
 
 /* This functions is injected into the Interrupt Vector Table, and will be
  * called whenever the SysTick timer fires (whose interval is configured inside
- * main() further below). */
+ * main() further below).
+ * It provides the equivalent of "millis()" in the variable "uptime_millis", 
+ * but it does roll-over 
+ */
 void SysTick_Handler() {
   uptime_millis++;
 }
 
-/* simple delay() */
+/* simple delay() -- don't use this normally */
 static void SpinDelay(uint32_t millis) {
   // Calculate the time at which we need to finish "sleeping".
-  uint32_t sleep_until = uptime_millis + millis;
+  uint32_t sleep_until = uptime_millis + millis; 
 
   // Spin until the requested time has passed.
   while (uptime_millis < sleep_until);
 }
 
-/* Set Toboot magic value to force bootloader and reset */
-static void rebootToBootloader() {
+/**********************************************************************
+ * Set Toboot magic value to force bootloader and reset 
+ **********************************************************************/
+static void rebootToBootloader()
+{
   toboot_runtime.magic = TOBOOT_FORCE_ENTRY_MAGIC;
-  setLEDsAll(0,0,0);
-  displayLEDs();
-  USBD_Disconnect();
-  USBTIMER_DelayMs(100); 
-  NVIC_SystemReset();    
+  setLEDsAll(0,0,0);     // Turn off all LEDs
+  displayLEDs();        
+  USBD_Disconnect();     // Disconnect nicely from USB
+  USBTIMER_DelayMs(100); // Wait a bit
+  NVIC_SystemReset();    // Reset
 }
-
 
 // --------------------------------------------------------
 
-
 /*********************************
- *
+ * Save current RAM pattern to flash 
  *********************************/
 static void writePatternFlash()
 {
-  CORE_DECLARE_IRQ_STATE;
-  write_str("writePatternFlash");
- 
-  CORE_ENTER_ATOMIC();
-  MSC->LOCK = MSC_UNLOCK_CODE;
-  //MSC_ErasePage((uint32_t*)0xf800); // erase first
-  MSC_ErasePage((uint32_t*)patternFlash); // erase first
-  MSC_WriteWord((uint32_t*)patternFlash, &pattern, FLASH_PAGE_SIZE);
-  MSC->LOCK = 0;
-  CORE_EXIT_ATOMIC();
-  write_str("done");
+  
+  MSC_Init();
+  MSC_ErasePage((uint32_t*)patternFlash); // must erase first
+  MSC_WriteWord((uint32_t*)patternFlash, pattern, FLASH_PAGE_SIZE);  // was &pattern (and why did that work?)
+  MSC_Deinit();
 }
 
-/*
- * Save all user notes to flash.
- */
-static void notesSaveAll()
+/*********************************
+ * Save RAM user notes to flash.
+ *********************************/
+static void writeNotesFlash()
 {
-  MSC_Init();  // done only in setup?
-  MSC_ErasePage((uint32_t*)userNotesFlash); // erase first
-  MSC_WriteWord((uint32_t*)userNotesFlash, &userNotesData, FLASH_PAGE_SIZE);
+  MSC_Init();
+  MSC_ErasePage((uint32_t*)userNotesFlash); // must erase first
+  MSC_WriteWord((uint32_t*)userNotesFlash, userNotes, FLASH_PAGE_SIZE); // why is this freezing?!?!
+  MSC_Deinit();
 }
 
-/*
+/**********************************************************************
  * Load all user notes from flash to RAM
- */
+ **********************************************************************/
 static void notesLoadAll()
 {
-  memcpy( userNotesData, userNotesFlash, FLASH_PAGE_SIZE);
+  memcpy( userNotes, userNotesFlash, FLASH_PAGE_SIZE);
 }
 
-/*
- * Write a note to RAM.
+/**********************************************************************
+ * Write a note to RAM from USB.
  * - Uses global 'inbuf'
- */
+ *********************************************************************/
 static void noteWrite(uint8_t pos )
 {
   if( pos >= NOTE_COUNT ) {
-    // error
-    return;
+    return;      // error
   }
-  memcpy( userNotesData + (pos*NOTE_SIZE), inbuf+3, NOTE_SIZE);
+  //  memcpy( userNotesData + (pos*NOTE_SIZE), inbuf+3, NOTE_SIZE);
+  memcpy( &userNotes[pos], inbuf+3, NOTE_SIZE);
 
-  notesSaveAll(); // FIXME: don't do this every write
+  doNotesWrite = true; // trigger save all notes
 }
 
-/*
- * Read a user note from RAM into 'reportToSend' buffer.
+/**********************************************************************
+ * Read a user note from RAM to USB.
  * - Uses global 'reportToSend'
- */
+ *********************************************************************/
 static void noteRead(uint8_t pos)
 {
-  memcpy( reportToSend+3, userNotesData + (pos*NOTE_SIZE), NOTE_SIZE );
+  //memcpy( reportToSend+3, userNotes + (pos*NOTE_SIZE), NOTE_SIZE );
+  memcpy( reportToSend+3, &userNotes[pos], NOTE_SIZE );
 }
 
 // -----------------------------------------------------------
 
 
-// -------- LED & color pattern handling -------------------------------------
+// -------- LED & color pattern handling -------------------------------
 //
 
 /**********************************************************************
  * @brief Send LED data out to LEDs
+ * - used by "color_funcs.h"
  **********************************************************************/
 static inline void displayLEDs(void)
 {
   ws2812_sendLEDs( leds, nLEDs );    // ws2811_showRGB();
 }
-/*
+
+/*********************************************************************
  * set blink1 to not playing, and no LEDs lit
- */
+ *********************************************************************/
 static void off(void)
 {
     playing = 0;
-    setRGBt(ctmp, 0,0,0);      // starting color
-    rgb_setCurr( &ctmp );  // FIXME: better way to do this?
+    setRGBt(ctmp, 0,0,0);  // starting color
+    rgb_setCurr( &ctmp );  // set all LEDs FIXME: better way to do this?
 }
 
-/*
+/*********************************************************************
  * Start playing the light pattern
  * playing values: 0 = off, 1 = normal, 2 == playing from powerup
- */
+ *********************************************************************/
 static void startPlaying( void )
 {
     playpos = playstart;
@@ -425,29 +439,38 @@ static void updateMisc()
 {
   if( (uptime_millis - last_misc_millis) > 500 ) {
     last_misc_millis = uptime_millis;
-    //write_char('.');
-    //write_char('0'+usbState);
+    //write_char('.');  //write_char('0'+usbState);
     // print out heartbeats that are also our USB state:
     // '.' == connected to computer
     // ':' == powered but no computer
     // a number is another USBD_State_TypeDef
-    write_char((usbState==USBD_STATE_CONFIGURED) ? '.' : (usbState==USBD_STATE_DEFAULT) ? ':': 0+usbState);
+    //write_char((usbState==USBD_STATE_CONFIGURED) ? '.' : (usbState==USBD_STATE_DEFAULT) ? ':': 0+usbState);
+    write_char((usbHasBeenSetup) ? '.' : ':');
 
     if( shouldRebootToBootloader ) {
       rebootToBootloader();  // and now we die
     }
-    
-    if( doPatternWrite ) {
-      doPatternWrite = false;
-      writePatternFlash();
-    }
+   
+  }
+  
+  if( doNotesWrite ) {
+    doNotesWrite = false;
+    write_str("writing userNotes...");
+    writeNotesFlash();
+    write_str("wrote userNotes");
+  }
+  
+  if( doPatternWrite ) {
+    doPatternWrite = false;
+    writePatternFlash();
+    write_str("wrote patternFlash");
   }
 
-
-  usbState = USBD_GetUsbState();
-  if( usbState == USBD_STATE_CONFIGURED ) {
-    usbHasBeenSetup = true;
-  }
+  // usbState: '5' is CONFIGURED, '3' is DEFAULT.  See em_usb.h
+  //USBD_State_TypeDef usbState = USBD_GetUsbState();
+  //if( usbState == USBD_STATE_CONFIGURED ) {
+  // usbHasBeenSetup = true;
+  //}
   
   /*
   // Capture/sample the state of the capacitive touch sensors.
@@ -502,7 +525,7 @@ static void makeSerialNumber()
 }
 
 /**********************************************************************
- * 
+ * Main, called by ResetHandler
  **********************************************************************/
 int main()
 {
@@ -527,11 +550,9 @@ int main()
     while (1);
   }
 
-  MSC_Init();  // Set up flash controller so we can do writes later
-
   setupLeuart();
 
-  write_str("blink1mk3-test3 startup...\n");
+  write_str("\nblink1mk3-test3e startup...\n");
   sprintf(dbgstr, "toboot_runtime: count:%d model:%x\n",
           toboot_runtime.boot_count, toboot_runtime.board_model);
   write_str(dbgstr);
@@ -544,7 +565,7 @@ int main()
   memset( pattern, 0, sizeof(patternline_t)*patt_max); // zero out just in case
   memcpy( pattern, patternFlash, sizeof(patternline_t)*patt_maxflash);
 
-#if 0
+#if 1
   notesLoadAll();
 #endif
 
@@ -552,13 +573,14 @@ int main()
   // Remember, this consumes TIMER0 and TIMER1, so those are off-limits to us.
   //CAPSENSE_Init();
 
-  makeSerialNumber();
+  makeSerialNumber();  // Make USB serial number from chip unique Id
   
   hidDescriptor = (void*) USBDESC_HidDescriptor; // FIXME
   
   // Enable the USB controller.
   // Remember, this consumes TIMER2 as per -DUSB_TIMER=USB_TIMER2 in Makefile
   // because TIMER0 & TIMER1 are already taken by the capacitive touch sensors.
+  //
   int rc = USBD_Init(&initstruct);
   sprintf(dbgstr, "usbd_init rc:%d\n", rc);
   write_str(dbgstr);
@@ -575,7 +597,9 @@ int main()
   for( uint8_t i=255; i>0; i-- ) {
     SpinDelay(1);
     uint8_t j = i>>4;      // not so bright, please
-    setLEDsAll(j,j,j);
+    //setLEDsAll(j,j,j);
+    setLED(j,j,j, 0);
+    setLED(j,j,j, 1);
     displayLEDs();
   }
   
@@ -589,10 +613,11 @@ int main()
     updateMisc();
     
   }
+  
 }
 
 
-/*
+/**********************************************************************
  * handleMessage(char* inbuf) -- main command router
  *
  * inbuf[] is 8 bytes long
@@ -616,7 +641,7 @@ int main()
  *    - Get version             format: { 1, 'v', 0,0,0,       0,0, 0 }
  *    - Test command            format: { 1, '!', 0,0,0,       0,0, 0 }
  *    - Write 100-byte note     format: { 1, 'F', noteid, data0 ... data99 } (3)
- *    - Read 100-byte note      format: { 1, 'F', noteid, data0 ... data99 } (3)
+ *    - Read 100-byte note      format: { 1, 'f', noteid, data0 ... data99 } (3)
  *    - Go to bootloader        format: { 1, 'G', 'o','B','o','o','t',0 } (3)
  *
  *  Fade to RGB color        format: { 1, 'c', r,g,b,      th,tl, ledn }
@@ -628,7 +653,7 @@ int main()
  *  Server mode tickle       format: { 1, 'D', {1/0},th,tl, {1,0},0, 0 }
  *  Get version              format: { 1, 'v', 0,0,0,        0,0, 0 }
  *
- */
+ *********************************************************************/
 static void handleMessage(uint8_t reportId)
 {
 #ifdef DEBUG_HANDLEMESSAGE
@@ -804,7 +829,7 @@ static void handleMessage(uint8_t reportId)
     }
   }
   //
-  //
+  // test test
   //
   else if( cmd == '!' ) {  // testtest
     reportToSend[2] = 0x55;
@@ -816,10 +841,18 @@ static void handleMessage(uint8_t reportId)
 
     //test2Flash(); // FIXME: this will get removed
   }
+  //
+  // Read User Note       format: { 1, 'f', noteid, 0, 0, 0, 0 }  
+  // NOTE: must be sent on reportId 2!
+  // 
   else if( cmd == 'f' && rId == 2 ) {  // read note
     uint8_t noteid = inbuf[2];
     noteRead( noteid ); // fills out reportToSend
   }
+  //
+  // Write User Note      format: { 2, 'F', noteid, data0,data1,...,data99 }
+  // NOTE: must be sent on reportId 2!
+  //
   else if( cmd == 'F' && rId == 2 ) { // write note
     uint8_t noteid = inbuf[2];
     noteWrite( noteid ); // reads from global inbuf+3
@@ -1005,10 +1038,13 @@ void stateChange(USBD_State_TypeDef oldState, USBD_State_TypeDef newState)
 {
   (void)oldState;
   if (newState == USBD_STATE_CONFIGURED) {
+    write_str("configured");
+    usbHasBeenSetup = true;
     //GPIO_PinOutClear(gpioPortA, 0);
     //USBD_Read(EP_OUT, receiveBuffer, BUFFERSIZE, dataReceivedCallback);
   }
   else if ( newState == USBD_STATE_SUSPENDED ) {
+    write_str("suspended");
     //    GPIO_PinOutSet(gpioPortA, 0);
   }
 }
