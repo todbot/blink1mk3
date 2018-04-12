@@ -255,7 +255,7 @@ static int test_reset_cause(const struct toboot_configuration *cfg)
         // leading to automatic booting of the application when first inserted.
         busy_wait(200);
 
-        // If the user has requested that we enter Toboot at poweron,
+        // If the user has requested that we enter the program at poweron,
         // then do so.
         if (!(cfg->config & TOBOOT_CONFIG_FLAG_AUTORUN))
             result = 1;
@@ -330,7 +330,7 @@ static int should_enter_bootloader(const struct toboot_configuration *cfg)
     if (test_boot_failures(cfg))
     {
         bootloader_reason = BOOT_FAILED_TOO_MANY_TIMES;
-        return 1;
+        //return 1;
     }
 
     // If there is no valid program, enter the bootloader
