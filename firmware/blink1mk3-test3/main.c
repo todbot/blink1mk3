@@ -92,12 +92,12 @@ void myputc ( void* p, char c) {
 }
 
 // number of entries a color pattern can contain
-#define patt_max 32
-#define patt_maxflash 16
+#define PATT_MAX 32
+#define PATT_MAXFLASH 16  // originally could only store 16
 
 uint8_t playpos   = 0; // current play position
 uint8_t playstart = 0; // start play position
-uint8_t playend   = patt_max; // end play position
+uint8_t playend   = PATT_MAX; // end play position
 uint8_t playcount = 0; // number of times to play loop, or 0=infinite
 uint8_t playing; // playing values: 0 = off, 1 = normal, 2 == playing from powerup playing=3 direct led addressing FIXME: this is dumb
 bool doPatternWrite = false;
@@ -108,7 +108,7 @@ uint16_t ttmp;   // temp time holder
 uint8_t ledn;    // temp ledn holder
 
 // in-memory copy of non-volatile pattern
-patternline_t pattern[patt_max]; 
+patternline_t pattern[PATT_MAX]; 
 
 /*
  * Flash / non-volatile color pattern
@@ -253,6 +253,7 @@ static void SpinDelay(uint32_t millis) {
  **********************************************************************/
 static void rebootToBootloader()
 {
+  // set magic value to force bootloader
   toboot_runtime.magic = TOBOOT_FORCE_ENTRY_MAGIC;
   setLEDsAll(0,0,0);     // Turn off all LEDs
   displayLEDs();        
@@ -268,7 +269,6 @@ static void rebootToBootloader()
  *********************************/
 static void writePatternFlash()
 {
-  
   MSC_Init();
   MSC_ErasePage((uint32_t*)patternFlash); // must erase first
   MSC_WriteWord((uint32_t*)patternFlash, pattern, FLASH_PAGE_SIZE);  // was &pattern (and why did that work?)
@@ -305,8 +305,6 @@ static void noteWrite(uint8_t pos )
   }
   //  memcpy( userNotesData + (pos*NOTE_SIZE), inbuf+3, NOTE_SIZE);
   memcpy( &userNotes[pos], inbuf+3, NOTE_SIZE);
-
-  doNotesWrite = true; // trigger save all notes
 }
 
 /**********************************************************************
@@ -353,7 +351,7 @@ static void startPlaying( void )
     playpos = playstart;
     pattern_update_next = uptime_millis; // millis(); // now;
     //pattern_update_next = 0; // invalidate it so plays immediately
-    //memcpy( pattern, patternflash, sizeof(patternline_t)*patt_max);
+    //memcpy( pattern, patternflash, sizeof(patternline_t)*PATT_MAX);
 }
 
 /**********************************************************************
@@ -562,12 +560,10 @@ int main()
   ws2812_setupSpi();
   
   // Load pattern from flash to RAM
-  memset( pattern, 0, sizeof(patternline_t)*patt_max); // zero out just in case
-  memcpy( pattern, patternFlash, sizeof(patternline_t)*patt_maxflash);
+  memset( pattern, 0, sizeof(patternline_t)*PATT_MAX); // zero out just in case
+  memcpy( pattern, patternFlash, sizeof(patternline_t)*PATT_MAXFLASH);
 
-#if 1
   notesLoadAll();
-#endif
 
   // Enable the capacitive touch sensor.
   // Remember, this consumes TIMER0 and TIMER1, so those are off-limits to us.
@@ -598,8 +594,8 @@ int main()
     SpinDelay(1);
     uint8_t j = i>>4;      // not so bright, please
     //setLEDsAll(j,j,j);
-    setLED(j,j,j, 0);
-    setLED(j,j,j, 1);
+    setLED(j,j,j, 0); // LED A
+    setLED(j,j,j, 1); // LED B
     displayLEDs();
   }
   
@@ -650,7 +646,7 @@ int main()
  *  Play/Pause, with pos     format: { 1, 'p', {1/0},pos,endpos, 0,0,0 }
  *  Write color pattern line format: { 1, 'P', r,g,b,      th,tl,  pos }
  *  Read color pattern line  format: { 1, 'R', 0,0,0,        0,0, pos }
- *  Server mode tickle       format: { 1, 'D', {1/0},th,tl, {1,0},0, 0 }
+ *  Server mode tickle       format: { 1, 'D', {1/0},th,tl, {1,0},sp, ep }
  *  Get version              format: { 1, 'v', 0,0,0,        0,0, 0 }
  *
  *********************************************************************/
@@ -720,9 +716,9 @@ static void handleMessage(uint8_t reportId)
     playstart = inbuf[3];
     playend   = inbuf[4];
     playcount = inbuf[5];
-    if( playend == 0 || playend > patt_max )
-      playend = patt_max;
-    else playend++;  // so that it's equivalent to patt_max, if you know what i mean
+    if( playend == 0 || playend > PATT_MAX )
+      playend = PATT_MAX;
+    else playend++;  // so that it's equivalent to PATT_MAX, if you know what i mean
     startPlaying();
   }
   //
@@ -748,7 +744,7 @@ static void handleMessage(uint8_t reportId)
     ptmp.dmillis = ((uint16_t)inbuf[5] << 8) | inbuf[6];
     ptmp.ledn    = ledn;
     uint8_t pos  = inbuf[7];
-    if( pos >= patt_max ) pos = 0;  // just in case
+    if( pos >= PATT_MAX ) pos = 0;  // just in case
     // save pattern line to RAM
     memcpy( &pattern[pos], &ptmp, sizeof(patternline_t) );
   }
@@ -757,7 +753,7 @@ static void handleMessage(uint8_t reportId)
   //
   else if( cmd == 'R' ) {
     uint8_t pos = inbuf[7];
-    if( pos >= patt_max ) pos = 0;
+    if( pos >= PATT_MAX ) pos = 0;
     patternline_t patt = pattern[pos];
     reportToSend[2] = patt.color.r;
     reportToSend[3] = patt.color.g;
@@ -770,13 +766,12 @@ static void handleMessage(uint8_t reportId)
   // Save color pattern to flash memory: { 1, 'W', 0x55,0xAA, 0xCA,0xFE, 0,0}
   //
   else if( cmd == 'W' ) {
-    // FIXME: why doesn't this extra check work?
-    // because it was off by One?
     if( inbuf[2] == 0xBE &&
         inbuf[3] == 0xEF &&
         inbuf[4] == 0xCA &&
         inbuf[5] == 0xFE ) {
-      doPatternWrite = true;
+      doPatternWrite = true; 
+      // we write in main loop, not in this callback
     }
   }
   //
@@ -786,16 +781,21 @@ static void handleMessage(uint8_t reportId)
     ledn = inbuf[2];
   }
   //
-  //  Server mode tickle        format: { 1, 'D', {1/0}, th,tl, {1,0}, sp, ep }
+  //  Server mode tickle        format: { 1, 'D', {1/0}, th,tl, st, sp, ep }
+  //     1/0 == on/off
+  //     t == tickle time
+  //     st == stop any current playing pattern and turn off
+  //     sp == pattern play start point
+  //     ep == pattern play end point
   //
   else if( cmd == 'D' ) {
     uint8_t serverdown_on = inbuf[2];
     uint16_t t = ((uint16_t)inbuf[3] << 8) | inbuf[4];
-    uint8_t st = inbuf[5];
+    uint8_t stop = inbuf[5];
     playstart  = inbuf[6];
     playend    = inbuf[7];
-    if( playend == 0 || playend > patt_max )
-      playend = patt_max;
+    if( playend == 0 || playend > PATT_MAX )
+      playend = PATT_MAX;
     
     if( serverdown_on ) {
       serverdown_millis = t;
@@ -803,7 +803,7 @@ static void handleMessage(uint8_t reportId)
     } else {
       serverdown_millis = 0; // turn off serverdown mode
     }
-    if( st == 0 ) {   // agreed, confusing
+    if( stop == 0 ) {   // agreed, confusing
       off();
     }
   }
@@ -847,7 +847,7 @@ static void handleMessage(uint8_t reportId)
   // 
   else if( cmd == 'f' && rId == 2 ) {  // read note
     uint8_t noteid = inbuf[2];
-    noteRead( noteid ); // fills out reportToSend
+    noteRead( noteid ); // fills out reportToSend from RAM note
   }
   //
   // Write User Note      format: { 2, 'F', noteid, data0,data1,...,data99 }
@@ -855,7 +855,9 @@ static void handleMessage(uint8_t reportId)
   //
   else if( cmd == 'F' && rId == 2 ) { // write note
     uint8_t noteid = inbuf[2];
-    noteWrite( noteid ); // reads from global inbuf+3
+    noteWrite( noteid ); // reads from global inbuf+3, writes to RAM note
+    doNotesWrite = true; // trigger save all notes
+    // we write in main loop, not in this callback
   }
   
 }
