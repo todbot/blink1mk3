@@ -38,7 +38,7 @@ IFLAGS = -I. \
 # Define CFLAGS, LSCRIPT and LFLAGS
 include ../compile_flags.mk
 # override
-LSCRIPT = ./tomu-toboot.ld
+LSCRIPT = ./blink1mk3.ld
 
 ################################################################################
 #
@@ -147,7 +147,10 @@ program-openocd:
 	openocd -f ../openocd.cfg -c "program $(TARGET).bin verify reset exit 0x4000"
 
 # uses ThingM blink(1) DFU VID:PID
+dfu: program-dfu
 program-dfu:
+	blink1-tool --gobootload
+	@sleep 1
 	dfu-util -v --device 27B8:01EE --download $(TARGET).bin
 
 size:
