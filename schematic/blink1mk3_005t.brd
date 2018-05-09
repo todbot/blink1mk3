@@ -161,7 +161,7 @@
 <plain>
 <text x="6.3246" y="-3.7999" size="0.6096" layer="21" ratio="12" rot="SR90">blink1.thingm.com</text>
 <text x="5.588" y="5.715" size="0.889" layer="21" ratio="12">blink(1)</text>
-<text x="-1.143" y="-3.556" size="0.6096" layer="22" ratio="10" rot="MR90">blink1mk3_002</text>
+<text x="-1.143" y="-3.556" size="0.6096" layer="22" ratio="10" rot="MR90">blink1mk3_005t</text>
 <rectangle x1="8.3407" y1="12.3031" x2="10.2457" y2="12.3095" layer="200"/>
 <rectangle x1="8.3407" y1="12.3095" x2="10.2457" y2="12.3158" layer="200"/>
 <rectangle x1="8.3407" y1="12.3158" x2="10.2457" y2="12.3222" layer="200"/>
