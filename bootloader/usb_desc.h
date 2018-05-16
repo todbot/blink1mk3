@@ -48,17 +48,20 @@ struct device_req {
     uint16_t wLength;
 };
 
+struct usb_string_descriptor_struct {
+    uint8_t bLength;
+    uint8_t bDescriptorType;
+    uint16_t wString[];
+};
 
 #define NUM_USB_BUFFERS           8
 #define VENDOR_ID                 0x27b8    // ThingM Vendor Id
 #define PRODUCT_ID                0x01EE    // ThingM blink(1) DFU Product Id
 #define DEVICE_VER                0x0101    // Bootloader version
-#define MANUFACTURER_NAME         {'T','h','i','n','g','M'} //u"ThingM"  // FIXME: why can't I use the "u" notation?
-#define MANUFACTURER_NAME_LEN     (7-1)
-//#define MANUFACTURER_NAME         u"ThingM" u""
-//#define MANUFACTURER_NAME_LEN     (7-1)
-#define PRODUCT_NAME              u"blink(1) mk3 bootloader " GIT_VERSION
-#define PRODUCT_NAME_LEN          sizeof(PRODUCT_NAME)-1
+#define MANUFACTURER_NAME         u"ThingM"
+#define MANUFACTURER_NAME_LEN     sizeof(MANUFACTURER_NAME)
+#define PRODUCT_NAME              u"blink(1) mk3 bootloader (0)" GIT_VERSION
+#define PRODUCT_NAME_LEN          sizeof(PRODUCT_NAME)
 #define EP0_SIZE                  64
 #define NUM_INTERFACE             1
 #define CONFIG_DESC_SIZE          (9+9+9)
@@ -70,8 +73,8 @@ extern const uint8_t usb_microsoft_wcid[MSFT_WCID_LEN];
 
 typedef struct {
     uint16_t  wValue;
-    const uint8_t *addr;
     uint16_t  length;
+    const uint8_t *addr;
 } usb_descriptor_list_t;
 
 extern const usb_descriptor_list_t usb_descriptor_list[];

@@ -21,6 +21,7 @@ build: prep
 	make -C tomu-bootloader/toboot -f Makefile.toboot-blink1.mk
 	cp tomu-bootloader/toboot/toboot-blink1.bin .
 
+
 clean:
 	make -C tomu-bootloader/toboot -f Makefile.toboot-blink1.mk clean
 
@@ -33,10 +34,12 @@ booster-build:
 booster:
 	cd tomu-bootloader/booster && ./make-booster ../toboot/toboot-blink1.bin ../../toboot-blink1-booster.bin
 #	./tomu-bootloader/booster/make-booster ./tomu-bootloader/toboot/toboot-blink1.bin ./toboot-blink1-booster.bin
+	cp toboot-blink1-booster.bin toboot-blink1-booster.dfu
+	dfu-suffix -v 27B8 -p 01EE -a toboot-blink1-booster.dfu
 
 # Uses ThingM blink(1) DFU bootloader VID/PID
 dfu-booster:
-	dfu-util -v --device 27B8:01EE --download toboot-blink1-booster.bin
+	dfu-util -v --device 27B8:01EE --download toboot-blink1-booster.dfu
 
 program-openocd:
 	openocd -f ../firmware/openocd.cfg -c 'program toboot-blink1.bin verify reset exit'

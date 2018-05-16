@@ -2,6 +2,7 @@
 #include "toboot-api.h"
 #include "toboot-internal.h"
 #include "mcu.h"
+#include "usb_desc.h"
 
 // this bootloader is for blink(1) devices
 // main differences:
@@ -15,7 +16,7 @@
 #define RTC_INTERVAL_MSEC 250
 
 
-static __attribute__((section(".appvectors"))) uint32_t appVectors[64];
+static uint32_t *app_vectors;
 enum bootloader_reason bootloader_reason;
 __attribute__((noreturn)) void updater(void);
 
@@ -242,7 +243,7 @@ static int test_reset_cause(const struct toboot_configuration *cfg)
     int result = 0;
     int rstcause = RMU->RSTCAUSE;
     boot_token.reserved++;
-    if (!rstcause & RMU_RSTCAUSE_PORST)
+    if (rstcause & RMU_RSTCAUSE_PORST)  // should be "!rstcause"?
     {
         boot_token.magic = 0;
         boot_token.boot_count = 0;
@@ -284,15 +285,15 @@ static int test_application_invalid(const struct toboot_configuration *cfg)
 
     (void)cfg;
     // Make sure the stack pointer is in RAM.
-    if (appVectors[0] < (uint32_t)&__ram_start__)
+    if (app_vectors[0] < (uint32_t)&__ram_start__)
         return 1;
-    if (appVectors[0] > (uint32_t)&__ram_end__)
+    if (app_vectors[0] > (uint32_t)&__ram_end__)
         return 1;
 
     // Make sure the entrypoint is in flash, after Toboot
-    if (appVectors[1] < (uint32_t)&__bl_end__)
+    if (app_vectors[1] < (uint32_t)&__bl_end__)
         return 1;
-    if (appVectors[1] >= (uint32_t)&__app_end__)
+    if (app_vectors[1] >= (uint32_t)&__app_end__)
         return 1;
 
     return 0;
@@ -300,7 +301,6 @@ static int test_application_invalid(const struct toboot_configuration *cfg)
 
 static int should_enter_bootloader(const struct toboot_configuration *cfg)
 {
-  
     // Reset the boot token if we've just been powered up for the first time
     if (test_reset_cause(cfg))
     {
@@ -330,7 +330,11 @@ static int should_enter_bootloader(const struct toboot_configuration *cfg)
     if (test_boot_failures(cfg))
     {
         bootloader_reason = BOOT_FAILED_TOO_MANY_TIMES;
-        //return 1;
+#ifdef BOARD_TYPE_BLINK1
+        // don't do anything becaue we are going to ignore boot failures for now
+#else
+        return 1;
+#endif
     }
 
     // If there is no valid program, enter the bootloader
@@ -349,7 +353,7 @@ __attribute__((noreturn)) static void boot_app(void)
     // Relocate IVT to application flash
     __disable_irq();
     NVIC->ICER[0] = 0xFFFFFFFF;
-    SCB->VTOR = (uint32_t)&appVectors[0];
+    SCB->VTOR = (uint32_t)&app_vectors[0];
 
     // Disable USB
     USB->GAHBCFG = _USB_GAHBCFG_RESETVALUE;
@@ -412,8 +416,8 @@ __attribute__((noreturn)) static void boot_app(void)
         "bx %2 \n\t"
         :
         : "r"(0xFFFFFFFF),
-          "r"(appVectors[0]),
-          "r"(appVectors[1]));
+          "r"(app_vectors[0]),
+          "r"(app_vectors[1]));
     while (1)
         ;
 }
@@ -421,11 +425,18 @@ __attribute__((noreturn)) static void boot_app(void)
 __attribute__((noreturn)) void bootloader_main(void)
 {
     const struct toboot_configuration *cfg = tb_get_config();
+    app_vectors = (uint32_t *)(1024 * cfg->start);
 
     if (should_enter_bootloader(cfg))
     {
         boot_token.magic = 0;
         boot_token.boot_count = 0;
+
+        // Update the iProduct field to reflect the bootloader reason,
+        // which is described in a specialized product string.
+        extern struct usb_string_descriptor_struct usb_string_product_name;
+        usb_string_product_name.wString[17] += bootloader_reason;
+
         updater();
     }
 
