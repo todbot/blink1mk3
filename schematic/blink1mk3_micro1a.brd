@@ -161,7 +161,7 @@
 <fusionsync huburn="a.cGVyc29uYWw6dWUyOWMzMmM3" projecturn="a.cGVyc29uYWw6dWUyOWMzMmM3IzIwMTgwNDI3MTI5NTI4MDU2" f3durn="urn:adsk.wipprod:dm.lineage:9UNMB15MTDShD2FySpBbRQ" pcbguid="e209628f-7fa7-49be-8488-af2e5e554a0c" lastpulledtime="" lastsyncedchangeguid="a7afccee-06b9-791f-c6a8-3ef20144bd3f"/>
 <plain>
 <text x="8.1486" y="-3.8999" size="0.6096" layer="21" ratio="12" rot="SR90">blink1.thingm.com</text>
-<text x="9.385" y="-2.412" size="0.889" layer="21" ratio="12" rot="R90">blink(1)</text>
+<text x="9.385" y="-2.666" size="0.889" layer="21" ratio="12" rot="R90">blink(1)</text>
 <text x="9.209" y="-3.983" size="0.6096" layer="22" ratio="10" rot="MR90">blink1mk3micro1a</text>
 <rectangle x1="8.3407" y1="12.3031" x2="10.2457" y2="12.3095" layer="200"/>
 <rectangle x1="8.3407" y1="12.3095" x2="10.2457" y2="12.3158" layer="200"/>
