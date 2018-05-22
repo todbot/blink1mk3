@@ -51,3 +51,6 @@ program-jlink:
 
 size:
 	arm-none-eabi-size ./tomu-bootloader/toboot/toboot-blink1.elf
+
+# for when we're powering it for first time, have jlink supply 5V
+# echo "power on\n; loadbin toboot-blink1,0 \nr \nexit\n" > jlink-tmp.txt
