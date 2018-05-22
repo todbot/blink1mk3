@@ -147,9 +147,10 @@ program-openocd:
 	openocd -f ../openocd.cfg -c "program $(TARGET).bin verify reset exit 0x4000"
 
 # uses ThingM blink(1) DFU VID:PID
+# the '-' means "continue even if it fails"
 dfu: program-dfu
 program-dfu:
-	blink1-tool --gobootload
+	-blink1-tool --gobootload
 	@sleep 1
 	dfu-util -v --device 27B8:01EE --download $(TARGET).bin
 
