@@ -9585,6 +9585,8 @@ USB_MICRO-B
 <part name="P+21" library="supply1" library_urn="urn:adsk.eagle:library:371" deviceset="+5V" device=""/>
 <part name="GND7" library="supply1" library_urn="urn:adsk.eagle:library:371" deviceset="GND" device=""/>
 <part name="X1" library="todstuff" library_urn="urn:adsk.eagle:library:1731349" deviceset="USB" device="PCB2SIDE" package3d_urn="urn:adsk.eagle:package:3133264/1"/>
+<part name="C12" library="adafruit" library_urn="urn:adsk.eagle:library:420" deviceset="C-US" device="C0603" value="0.1uF"/>
+<part name="GND24" library="supply1" library_urn="urn:adsk.eagle:library:371" deviceset="GND" device=""/>
 </parts>
 <sheets>
 <sheet>
@@ -9605,7 +9607,10 @@ USB_MICRO-B
 <instance part="+3V1" gate="G$1" x="129.54" y="154.94"/>
 <instance part="D" gate="G$1" x="27.94" y="127" rot="R90"/>
 <instance part="C" gate="G$1" x="27.94" y="129.54" rot="R90"/>
-<instance part="D1" gate="G$1" x="182.88" y="175.26"/>
+<instance part="D1" gate="G$1" x="182.88" y="175.26" smashed="yes">
+<attribute name="NAME" x="182.88" y="178.2826" size="1.778" layer="95"/>
+<attribute name="VALUE" x="180.34" y="170.4086" size="1.778" layer="96"/>
+</instance>
 <instance part="C4" gate="G$1" x="226.06" y="170.18"/>
 <instance part="LED1" gate="G$1" x="187.96" y="152.4"/>
 <instance part="LED2" gate="G$1" x="213.36" y="152.4"/>
@@ -9726,6 +9731,8 @@ USB_MICRO-B
 </instance>
 <instance part="GND7" gate="1" x="106.68" y="40.64"/>
 <instance part="X1" gate="G$1" x="121.92" y="22.86"/>
+<instance part="C12" gate="G$1" x="200.66" y="170.18"/>
+<instance part="GND24" gate="1" x="200.66" y="162.56"/>
 </instances>
 <busses>
 </busses>
@@ -9850,6 +9857,10 @@ USB_MICRO-B
 <label x="109.22" y="43.18" size="1.778" layer="95"/>
 <pinref part="U$2" gate="G$1" pin="C"/>
 <pinref part="GND7" gate="1" pin="GND"/>
+</segment>
+<segment>
+<pinref part="C12" gate="G$1" pin="2"/>
+<pinref part="GND24" gate="1" pin="GND"/>
 </segment>
 </net>
 <net name="+5V" class="0">
@@ -10171,10 +10182,14 @@ USB_MICRO-B
 <net name="VLEDA" class="0">
 <segment>
 <wire x1="193.04" y1="175.26" x2="193.04" y2="167.64" width="0.1524" layer="91"/>
-<label x="193.04" y="170.18" size="1.778" layer="95"/>
+<label x="190.5" y="177.8" size="1.778" layer="95"/>
 <wire x1="185.42" y1="175.26" x2="193.04" y2="175.26" width="0.1524" layer="91"/>
 <pinref part="D1" gate="G$1" pin="C"/>
 <pinref part="LED1" gate="G$1" pin="VDD"/>
+<pinref part="C12" gate="G$1" pin="1"/>
+<wire x1="193.04" y1="175.26" x2="200.66" y2="175.26" width="0.1524" layer="91"/>
+<wire x1="200.66" y1="175.26" x2="200.66" y2="172.72" width="0.1524" layer="91"/>
+<junction x="193.04" y="175.26"/>
 </segment>
 </net>
 <net name="CAP1A" class="0">
