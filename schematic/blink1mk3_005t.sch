@@ -444,7 +444,7 @@ Standard 8.5x11 US Letter frame</description>
 <smd name="2" x="0" y="-0.01" dx="2.5" dy="1.27" layer="1" rot="R90"/>
 <smd name="3" x="2.54" y="-0.01" dx="2.5" dy="1.27" layer="1" rot="R90"/>
 </package>
-<package name="QFN24PADLOOSE" urn="urn:adsk.eagle:footprint:1731446/1" library_version="15" library_locally_modified="yes">
+<package name="QFN24PADLOOSEDONTUSE" urn="urn:adsk.eagle:footprint:1731446/1" locally_modified="yes" library_version="16" library_locally_modified="yes">
 <wire x1="2.15" y1="-2.6" x2="2.55" y2="-2.6" width="0.2032" layer="21"/>
 <wire x1="2.55" y1="-2.15" x2="2.55" y2="-2.6" width="0.2032" layer="21"/>
 <wire x1="-2.2" y1="-2.6" x2="-2.6" y2="-2.6" width="0.2032" layer="21"/>
@@ -547,9 +547,9 @@ Standard 8.5x11 US Letter frame</description>
 <packageinstance name="QFN24PAD"/>
 </packageinstances>
 </package3d>
-<package3d name="QFN24PADLOOSE" urn="urn:adsk.eagle:package:1731516/2" type="box" library_version="15" library_locally_modified="yes">
+<package3d name="QFN24PADLOOSE" urn="urn:adsk.eagle:package:1731516/2" locally_modified="yes" type="box" library_version="16" library_locally_modified="yes">
 <packageinstances>
-<packageinstance name="QFN24PADLOOSE"/>
+<packageinstance name="QFN24PADLOOSEDONTUSE"/>
 </packageinstances>
 </package3d>
 </packages3d>
@@ -732,7 +732,7 @@ Standard 8.5x11 US Letter frame</description>
 </device>
 </devices>
 </deviceset>
-<deviceset name="EFM32HG309F64G" urn="urn:adsk.eagle:component:1731555/9" prefix="U" library_version="16">
+<deviceset name="EFM32HG309F64G" urn="urn:adsk.eagle:component:1731555/9" locally_modified="yes" prefix="U" library_version="16" library_locally_modified="yes">
 <gates>
 <gate name="G$1" symbol="EFM32HG309" x="0" y="7.62"/>
 </gates>
@@ -772,7 +772,7 @@ Standard 8.5x11 US Letter frame</description>
 <technology name=""/>
 </technologies>
 </device>
-<device name="LOOSE" package="QFN24PADLOOSE">
+<device name="LOOSE" package="QFN24PADLOOSEDONTUSE">
 <connects>
 <connect gate="G$1" pin="/RESET" pad="7"/>
 <connect gate="G$1" pin="AVDD_0" pad="12"/>
