@@ -45,10 +45,35 @@ extern "C" {
 #define REPORT_ID  1
 #define REPORT2_ID  2
 #define REPORT_COUNT 8
-#define REPORT2_COUNT 128
+#define REPORT2_COUNT 60   // 60 = 15*4, must be 4-byte multiple in length & 4-byte aligned
+
 
 SL_ALIGN(4)
-const char MyHIDReportDescriptor[48] SL_ATTRIBUTE_ALIGN(4) =
+const char MyHIDReportDescriptor[] SL_ATTRIBUTE_ALIGN(4) =
+{
+    0x06, 0xAB, 0xFF,
+    0x0A, 0x00, 0x20,
+    
+    0xA1, 0x01,                    // COLLECTION (Application)
+    0x15, 0x00,                    //   LOGICAL_MINIMUM (0)
+    0x26, 0xff, 0x00,              //   LOGICAL_MAXIMUM (255)
+    0x75, 0x08,                    //   REPORT_SIZE (8)
+    0x85, REPORT_ID,               //   REPORT_ID (1)
+    0x95, REPORT_COUNT,            //   REPORT_COUNT (8)
+    0x09, 0x00,                    //   USAGE (Undefined)
+    0xb2, 0x02, 0x01,              //   FEATURE (Data,Var,Abs,Buf)
+    0x75, 0x08,                    //   REPORT_SIZE (8)
+    0x85, REPORT2_ID,               //   REPORT_ID (1)
+    0x95, REPORT2_COUNT,            //   REPORT_COUNT (8)
+    0x09, 0x00,                    //   USAGE (Undefined)
+    0xb2, 0x02, 0x01,              //   FEATURE (Data,Var,Abs,Buf)
+    0xc0,                          // END_COLLECTION
+};
+
+/* 
+// old blink1 hid descriptor
+SL_ALIGN(4)
+const char MyHIDReportDescriptor[] SL_ATTRIBUTE_ALIGN(4) =
 {
     0x06, 0xAB, 0xFF,
     0x0A, 0x00, 0x20,
@@ -65,17 +90,67 @@ const char MyHIDReportDescriptor[48] SL_ATTRIBUTE_ALIGN(4) =
     0x09, 0x00,                    //   USAGE (Undefined)
     0xb2, 0x02, 0x01,              //   FEATURE (Data,Var,Abs,Buf)
     0xc0,                          // END_COLLECTION
-    0xa1, 0x01,                    // COLLECTION (Application)
-    0x15, 0x00,                    //   LOGICAL_MINIMUM (0)
-    0x26, 0xff, 0x00,              //   LOGICAL_MAXIMUM (255)
-    0x75, 0x08,                    //   REPORT_SIZE (8)
-    0x85, REPORT2_ID,              //   REPORT_ID (2)
-    0x95, REPORT2_COUNT,            //   REPORT_COUNT (64)
-    0x09, 0x00,                    //   USAGE (Undefined)
-    0xb2, 0x02, 0x01,              //   FEATURE (Data,Var,Abs,Buf)
-    0xc0                           // END_COLLECTION
 };
+*/
 
+/*
+SL_ALIGN(4)
+const char MyHIDReportDescriptor[] SL_ATTRIBUTE_ALIGN(4) =
+{
+  0x06, 0xAB, 0xff,              // USAGE_PAGE (Generic Desktop)
+  0x09, 0x01,                    // USAGE (Vendor Usage 1)
+  
+  0xA1, 0x01,                    // COLLECTION (Application)
+  0x85, REPORT_ID,               //     REPORT_ID (1)
+  0x09, 0x00,                    //     USAGE (Undefined)
+  0x15, 0x00,                    //     LOGICAL_MINIMUM (0)
+  0x26, 0xff, 0x00,              //     LOGICAL_MAXIMUM (255)
+  0x75, 0x08,                    //     REPORT_SIZE (8)
+  0x95, REPORT_COUNT,            //     REPORT_COUNT (8)
+  
+  0x85, REPORT2_ID,              //     REPORT_ID (2)
+  0x09, 0x00,                    //     USAGE (Undefined)
+  0x95, REPORT2_COUNT,           //     REPORT_COUNT (64)
+  0x75, 0x08,                    //     REPORT_SIZE (8)
+
+  0xc0,                          // END_COLLECTION
+
+};
+*/
+ /*
+SL_ALIGN(4)
+const char MyHIDReportDescriptor[] SL_ATTRIBUTE_ALIGN(4) =
+{
+
+  //0x06, 0x00, 0xff,              // USAGE_PAGE (Generic Desktop)
+  //0x09, 0x01,                    // USAGE (Vendor Usage 1)
+
+  0x06, 0xAB, 0xff,              // USAGE_PAGE (Generic Desktop)
+  0x09, 0x01,                    // USAGE (Vendor Usage 1)
+  
+  0xA1, 0x01,                    // COLLECTION (Application)
+  0xA1, 0x02,                    //   Collection (Logical)
+  0x85, REPORT_ID,               //     REPORT_ID (1)
+  0x15, 0x00,                    //     LOGICAL_MINIMUM (0)
+  0x26, 0xff, 0x00,              //     LOGICAL_MAXIMUM (255)
+  0x95, REPORT_COUNT,            //     REPORT_COUNT (8)
+  0x75, 0x08,                    //     REPORT_SIZE (8)
+  0x09, 0x00,                    //     USAGE (Undefined)
+  0xb2, 0x02, 0x01,              //     FEATURE (Data,Var,Abs,Buf)
+  0xc0,                          //   END_COLLECTION
+    
+  0xA1, 0x02,                    //   Collection (Logical)
+  0x85, REPORT2_ID,              //     REPORT_ID (2)
+  0x15, 0x00,                    //     LOGICAL_MINIMUM (0)
+  0x26, 0xff, 0x00,              //     LOGICAL_MAXIMUM (255)
+  0x95, REPORT2_COUNT,           //     REPORT_COUNT (64)
+  0x75, 0x08,                    //     REPORT_SIZE (8)
+  0x09, 0x01,                    //     USAGE (Undefined)
+  0xb2, 0x02, 0x01,              //     FEATURE (Data,Var,Abs,Buf)
+  0xc0,                          //   END_COLLECTION
+  0xc0,                          // END_COLLECTION
+};
+ */
 
 /* Device Descriptor. Refer to the USB 2.0 Specification, chapter 9.6 */
 SL_ALIGN(4)
@@ -98,7 +173,7 @@ static const USB_DeviceDescriptor_TypeDef deviceDesc SL_ATTRIBUTE_ALIGN(4) =
 };
 
 
-/* wTotalLength (LSB)  = 9 + 9 + 9 + (7 * 1)*/
+/* wTotalLength (LSB)  = 9 + 9 + 9 + (7 * 2) = 41 */
 #define CONFIGDESC_SIZE   (USB_CONFIG_DESCSIZE +                  \
                            USB_INTERFACE_DESCSIZE +               \
                            USB_HID_DESCSIZE +                     \
@@ -118,9 +193,9 @@ static const uint8_t configDesc[] SL_ATTRIBUTE_ALIGN(4) =
   CONFIGDESC_SIZE>>8,                   /* wTotalLength (MSB)   */
 
   1,                                    /* bNumInterfaces       */
-  1,                                    /* bConfigurationValue  */
-  0,                                    /* iConfiguration       */
-  0xC0,                                 /* bmAttrib */  // 0x80 = buspowered | 0x40 = self-powered = 0xc0
+  1,                                    /* bConfigurationValue  (index of this configuration) */
+  0,                                    /* iConfiguration       (configuration string index) */
+  0x80,                                 /* bmAttrib */  // 0x80 = buspowered | 0x40 = self-powered = 0xc0
   CONFIG_DESC_MAXPOWER_mA( 100 ),       /* bMaxPower: 100 mA    */
 
   /*** Interface descriptor ***/
@@ -132,7 +207,7 @@ static const uint8_t configDesc[] SL_ATTRIBUTE_ALIGN(4) =
   USB_CLASS_HID,                        /* bInterfaceClass      */  // 3
   0,                                    /* bInterfaceSubClass   */  
   0,                                    /* bInterfaceProtocol   */
-  4,                                    /* iInterface           */ // (string index)
+  0,                                    /* iInterface         (configuration string index) */
 
   /*** HID descriptor ***/
   USB_HID_DESCSIZE,                     /* bLength               */ // 9

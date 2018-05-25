@@ -24,6 +24,20 @@
 
 #include "color_types.h"
 
+// max number of LEDs
+//#define nLEDs 18
+
+// set the current color OF ALL LEDs
+void rgb_setCurr( rgb_t* newcolor );
+
+void rgb_setDestN( rgb_t* newcolor, int steps, int ledn );
+
+// set a new destination color
+void rgb_setDest( rgb_t* newcolor, int steps, int ledn  );
+
+// call at every tick
+void rgb_updateCurrent(void);
+
 // set the current color OF ALL LEDs
 void rgb_setCurr( rgb_t* newcolor )
 {

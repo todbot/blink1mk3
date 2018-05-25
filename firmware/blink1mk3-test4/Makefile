@@ -150,8 +150,7 @@ program-openocd:
 # the '-' means "continue even if it fails"
 dfu: program-dfu
 program-dfu:
-	-blink1-tool --gobootload
-	@sleep 1.5
+	-blink1-tool --gobootload && sleep 1.0
 	cp $(TARGET).bin $(TARGET).dfu
 	dfu-suffix -v 27B8 -p 01EE -a $(TARGET).dfu
 	dfu-util -v --device 27B8:01EE --download $(TARGET).dfu

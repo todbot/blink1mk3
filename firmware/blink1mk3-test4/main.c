@@ -4,6 +4,12 @@
  *
  * 2018 Tod E. Kurt, http://todbot.com/blog/
  *
+ * Differences from blink1mk3-test3:
+ * - fixed two-report HID descriptor to work on Windows (and you know, be actually correct)
+ * - add startup_params
+ * - fixes issue with usernotes killing pattern lines
+ * - cleaned up debug printing, increased dbgstr size from 30 to 50 bytes
+ *
  * Differences from blink1mk3-test1:
  * - responds correctly to ReportId 2 (64-bytes), testable with "blink1-tool -i 2 --testtest" 
  * - code reformatted heavily to pull ws2812 driver and color_funcs into separate files
@@ -31,13 +37,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define DEBUG 1
 
 #define BOARD_TYPE_BLINK1MK3
 //#define BOARD_TYPE_TOMU 
 //#define BOARD_TYPE_EFM32HGDEVKIT
 
 // define this to print out cmd+args in handleMessage()
-//#define DEBUG_HANDLEMESSAGE
+#define DEBUG_HANDLEMESSAGE
 
 #include "toboot.h"
 #include "leuart.h"
@@ -49,6 +56,21 @@
 
 #define blink1_version_major '3'
 #define blink1_version_minor '1'
+
+// forward decls
+void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n);
+static inline void displayLEDs(void);
+static void off();
+#define setLEDsAll(r,g,b) { setLED(r,g,b, 255); } // 255 means all
+
+#define nLEDs 18
+
+// allocate faders, one per LED
+rgbfader_t fader[nLEDs];
+
+#include "color_funcs.h"   // needs setLED(), nLEDs, fader[] defined
+
+
 
 extern struct toboot_runtime toboot_runtime;
 /* Declare support for Toboot V2 */
@@ -63,6 +85,8 @@ TOBOOT_CONFIGURATION(0);
 // to prevent bootloader from running after 3 power-cycles
 // Because apparently the RAM gets enough power to stay alive?x
 
+
+// valid values for 'bootmode' in startup_param
 enum {
     BOOT_NORMAL = 0,  // normal <v205 behavior
     BOOT_PLAY,        // play a script on startup (servertickle)
@@ -85,36 +109,31 @@ typedef struct {
 
 startup_params_t startup_params;
 
-
-// max number of LEDs
-#define nLEDs 18
-
 // array of LED data (sent to LEDs)
 rgb_t leds[nLEDs];  
 
-// foward decl for color_funcs.h (FIXME: make color_funcs a real lib)
-static void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n);
-#define setLEDsAll(r,g,b) { setLED(r,g,b, 255); } // 255 means all
-static inline void displayLEDs(void);
-static void off();
 
 // global which is active LED
 uint8_t ledn;
 
-// allocate faders, one per LED
-rgbfader_t fader[nLEDs];
-
-#include "color_funcs.h"  // included here becuase it needs setLed()
 
 
+//#if DEBUG
+#if 1
 // used when sprintf()-ing to leuart
-char dbgstr[30];
-
+char dbgstr[50];
 // for tiny printf
 void myputc ( void* p, char c) {
-  (void)p;
-  write_char(c);
+  (void)p;  write_char(c);
 }
+// a debug printf out the leuart
+#define dbg_printf(fmt,...) sprintf(dbgstr,fmt,__VA_ARGS__); write_str(dbgstr);
+#define dbg_str(s) write_str(s)
+#else
+#define dbg_printf(fmt,...)
+#define dbg_str(s)
+#endif
+
 
 // number of entries a color pattern can contain
 #define PATT_MAX_RAM 32
@@ -128,8 +147,8 @@ void myputc ( void* p, char c) {
  * Total size = 1000 < FLASH_PAGE_SIZE = 1024
  * .userNotesFlashSection is in flash at address 0xf800 (64k - (2*1k)) 
  */
-#define NOTE_SIZE 100
-#define NOTE_COUNT 10
+#define NOTE_SIZE 50
+#define NOTE_COUNT 20
 
 // what is in a note
 typedef struct {
@@ -239,7 +258,8 @@ static void  *hidDescriptor = NULL;
 // The report packet received from the host
 // could be REPORT_COUNT or REPORT2_COUNT long
 // first byte is reportId
-static uint8_t  inbuf[REPORT2_COUNT];
+SL_ALIGN(4)
+static uint8_t  inbuf[REPORT2_COUNT] SL_ATTRIBUTE_ALIGN(4);
 
 // The report packet to send to the host 
 // generally it's a copy of the last report received, then modified
@@ -283,6 +303,8 @@ static const USBD_Init_TypeDef initstruct =
 void SysTick_Handler() {
   uptime_millis++;
 }
+
+#define millis() (uptime_millis)
 
 /* simple delay() -- don't use this normally */
 static void SpinDelay(uint32_t millis) {
@@ -337,6 +359,9 @@ static void writeNotesFlash()
 static void notesLoadAll()
 {
   memcpy( userNotes, userNotesFlash, (NOTE_COUNT*NOTE_SIZE)); //FLASH_PAGE_SIZE);
+  // note: do not do "flash_page_size" or it overwrites other variables near 'userNotes'
+  // because 'userNotes' size is smaller than flash_page_size
+  // (NOTE_COUNT*NOTE_SIZE) = 1000, FLASH_PAGE_SIZE = 1024
 }
 
 /**********************************************************************
@@ -358,6 +383,7 @@ static void noteWrite(uint8_t pos )
  *********************************************************************/
 static void noteRead(uint8_t pos)
 {
+  dbg_printf("noteRead:%d\n",pos);
   //memcpy( reportToSend+3, userNotes + (pos*NOTE_SIZE), NOTE_SIZE );
   memcpy( reportToSend+3, &userNotes[pos], NOTE_SIZE );
 }
@@ -394,7 +420,7 @@ static void off(void)
 static void startPlaying( void )
 {
     playpos = playstart;
-    pattern_update_next = uptime_millis; // millis(); // now;
+    pattern_update_next = millis(); //uptime_millis; // millis(); // now;
     //pattern_update_next = 0; // invalidate it so plays immediately
     //memcpy( pattern, patternflash, sizeof(patternline_t)*PATT_MAX);
 }
@@ -402,7 +428,7 @@ static void startPlaying( void )
 /**********************************************************************
  * @brief Set the color of a particular LED, or all of them
  **********************************************************************/
-static void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n)
+void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n)
 {
     if (n == 255) { // all of them  // FIXME: look into why 255
         for (int i = 0; i < nLEDs; i++) {
@@ -423,10 +449,10 @@ static void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n)
  **********************************************************************/
 static void updateLEDs(void)
 {
-    uint32_t now = uptime_millis;
+    //uint32_t now = uptime_millis;
 
     // update LEDs every led_update_millis
-    if( (long)(now - led_update_next) > 0 ) {
+    if( (long)(millis() - led_update_next) > 0 ) {
         led_update_next += led_update_millis;
 
         rgb_updateCurrent();  // playing=3 => direct LED addressing (not anymore)
@@ -434,7 +460,7 @@ static void updateLEDs(void)
 #if 1
         // check for non-computer power up
         if( !usbHasBeenSetup ) {
-            if( !playing && now > 500 ) {  // 500 msec wait
+            if( !playing && millis() > 500 ) {  // 500 msec wait
                 playing = 2;
                 startPlaying();
             }
@@ -449,15 +475,18 @@ static void updateLEDs(void)
 
     // playing light pattern
     if( playing ) {
-        if( (long)(now - pattern_update_next) > 0  ) { // time to get next line
+        if( (long)(millis() - pattern_update_next) > 0  ) { // time to get next line
             ctmp = pattern[playpos].color;
             ttmp = pattern[playpos].dmillis;
             ledn = pattern[playpos].ledn;
-            
-            sprintf(dbgstr, "pattern[%d] rgb:%2x%2x%2x t:%d l:%d\n",
-                    playpos, ctmp.r, ctmp.g, ctmp.b, ttmp, ledn);
-            write_str(dbgstr);
-            
+#if 1
+            dbg_printf("%ld\n",millis());
+#endif
+#if 0            
+            // enabling this causes a lag in pattern playing because of blocking LEUART writes
+            dbg_printf("%ld patt %d rgb:%x %x %x t:%d l:%d\n", millis(),
+                       playpos, ctmp.r, ctmp.g, ctmp.b, ttmp, ledn);
+#endif            
             if( ttmp == 0 && ctmp.r == 0 && ctmp.g == 0 && ctmp.b == 0) {
                 // skip lines set to zero
             } else {
@@ -474,7 +503,7 @@ static void updateLEDs(void)
                     playcount = 0; // infinite playing
                 }
             }
-            pattern_update_next += ttmp*10;
+            pattern_update_next += ttmp*10;  // okay if ttmp is zero
         }
     } // playing
     
@@ -486,7 +515,7 @@ static void updateLEDs(void)
 static void updateMisc()
 {
   if( (uptime_millis - last_misc_millis) > 500 ) {
-    last_misc_millis = uptime_millis;
+    last_misc_millis = millis(); //uptime_millis;
     //write_char('.');  //write_char('0'+usbState);
     // print out heartbeats that are also our USB state:
     // '.' == connected to computer
@@ -503,15 +532,15 @@ static void updateMisc()
   
   if( doNotesWrite ) {
     doNotesWrite = false;
-    write_str("writing userNotes...");
+    dbg_str("writing userNotes...");
     writeNotesFlash();
-    write_str("wrote userNotes");
+    dbg_str("wrote userNotes");
   }
   
   if( doPatternWrite ) {
     doPatternWrite = false;
     writePatternFlash();
-    write_str("wrote patternFlash");
+    dbg_str("wrote patternFlash");
   }
 
   // usbState: '5' is CONFIGURED, '3' is DEFAULT.  See em_usb.h
@@ -600,10 +629,9 @@ int main()
 
   setupLeuart();
 
-  write_str("\nblink1mk3-test4 startup...\n");
-  sprintf(dbgstr, "toboot_runtime: count:%d model:%x\n",
-          toboot_runtime.boot_count, toboot_runtime.board_model);
-  write_str(dbgstr);
+  dbg_str("\nblink1mk3-test4 startup...\n");
+  dbg_printf("toboot_runtime: count:%d model:%x\n",
+             toboot_runtime.boot_count, toboot_runtime.board_model);
   toboot_runtime.boot_count = 0; // reset boot count to say we're alive
   // FIXME: how is the toboot_runtime RAM being preserved on power cycle?
 
@@ -613,16 +641,17 @@ int main()
   memset( pattern, 0, sizeof(patternline_t)*PATT_MAX_RAM); // zero out just in case
   memcpy( pattern, patternFlash, sizeof(patternline_t)*PATT_MAX_FLASH);
 
+#if 0
   // debug
   for( int i=0; i<PATT_MAX_FLASH; i++) {
     ctmp = pattern[i].color;
     ttmp = pattern[i].dmillis;
     ledn = pattern[i].ledn;
-    sprintf(dbgstr, "pattern[%d] rgb:%2x%2x%2x t:%d l:%d\n",
-            i, ctmp.r, ctmp.g, ctmp.b, ttmp, ledn);
-    write_str(dbgstr);
+    dbg_printf("pattern[%d] rgb:%2x%2x%2x t:%d l:%d\n",
+               i, ctmp.r, ctmp.g, ctmp.b, ttmp, ledn);
   }
-
+#endif
+  
   notesLoadAll();
   
   
@@ -639,8 +668,7 @@ int main()
   // because TIMER0 & TIMER1 are already taken by the capacitive touch sensors.
   //
   int rc = USBD_Init(&initstruct);
-  sprintf(dbgstr, "usbd_init rc:%d\n", rc);
-  write_str(dbgstr);
+  dbg_printf("usbd_init rc:%d\n", rc);
 
   // When using a debugger it is practical to uncomment the following three
   // lines to force host to re-enumerate the device.
@@ -650,7 +678,7 @@ int main()
   USBD_Connect();         
 #endif
 
-  // startup white fadeout
+  // standard blink1 startup white fadeout
   for( uint8_t i=255; i>0; i-- ) {
     SpinDelay(1);
     uint8_t j = i>>4;      // not so bright, please
@@ -664,6 +692,7 @@ int main()
   off();
   displayLEDs(); // why this here, to prime the system?
 
+  // main loop 
   while(1) {
 
     updateLEDs();
@@ -697,8 +726,8 @@ int main()
  *    - Write EEPROM location   format: { 1, 'E', ad,v,0,      0,0, 0 } (1)
  *    - Get version             format: { 1, 'v', 0,0,0,       0,0, 0 }
  *    - Test command            format: { 1, '!', 0,0,0,       0,0, 0 }
- *    - Write 100-byte note     format: { 1, 'F', noteid, data0 ... data99 } (3)
- *    - Read 100-byte note      format: { 1, 'f', noteid, data0 ... data99 } (3)
+ *    - Write 50-byte note      format: { 1, 'F', noteid, data0 ... data99 } (3)
+ *    - Read  50-byte note      format: { 1, 'f', noteid, data0 ... data99 } (3)
  *    - Go to bootloader        format: { 1, 'G', 'o','B','o','o','t',0 } (3)
  *
  *  Fade to RGB color        format: { 1, 'c', r,g,b,      th,tl, ledn }
@@ -714,9 +743,8 @@ int main()
 static void handleMessage(uint8_t reportId)
 {
 #ifdef DEBUG_HANDLEMESSAGE
-  sprintf(dbgstr, "%d:%x,%x,%x,%x,%x,%x,%x,%x\n", reportId,
+  dbg_printf("%d:%x,%x,%x,%x,%x,%x,%x,%x\n", reportId,
           inbuf[0],inbuf[1],inbuf[2],inbuf[3],inbuf[4],inbuf[5],inbuf[6],inbuf[7] );
-  write_str(dbgstr);
 #endif
   
   // pre-load response with request, contains report id
@@ -860,7 +888,7 @@ static void handleMessage(uint8_t reportId)
     
     if( serverdown_on ) {
       serverdown_millis = t;
-      serverdown_update_next = uptime_millis + (t*10);
+      serverdown_update_next = millis() + (t*10); //uptime_millis + (t*10);
     } else {
       serverdown_millis = 0; // turn off serverdown mode
     }
@@ -893,12 +921,13 @@ static void handleMessage(uint8_t reportId)
   // test test
   //
   else if( cmd == '!' ) {  // testtest
+    uint32_t now = millis();
     reportToSend[2] = 0x55;
     reportToSend[3] = 0xAA;
     reportToSend[4] = rId; //(uint8_t)(uptime_millis >> 24);
-    reportToSend[5] = (uint8_t)(uptime_millis >> 16);
-    reportToSend[6] = (uint8_t)(uptime_millis >> 8);
-    reportToSend[7] = (uint8_t)(uptime_millis >> 0);
+    reportToSend[5] = (uint8_t)(now >> 16);
+    reportToSend[6] = (uint8_t)(now >> 8);
+    reportToSend[7] = (uint8_t)(now >> 0);
 
     //test2Flash(); // FIXME: this will get removed
   }
@@ -1100,14 +1129,15 @@ int setupCmd(const USB_Setup_TypeDef *setup)
 void stateChange(USBD_State_TypeDef oldState, USBD_State_TypeDef newState)
 {
   (void)oldState;
+  dbg_printf(" USBst:%d ",newState);
   if (newState == USBD_STATE_CONFIGURED) {
-    write_str("configured");
+    dbg_str(" USBconfigured ");
     usbHasBeenSetup = true;
     //GPIO_PinOutClear(gpioPortA, 0);
     //USBD_Read(EP_OUT, receiveBuffer, BUFFERSIZE, dataReceivedCallback);
   }
   else if ( newState == USBD_STATE_SUSPENDED ) {
-    write_str("suspended");
+    dbg_str(" USBsuspended ");
     //    GPIO_PinOutSet(gpioPortA, 0);
   }
 }
