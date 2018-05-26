@@ -6,8 +6,9 @@
  *
  * Differences from blink1mk3-test3:
  * - fixed two-report HID descriptor to work on Windows (and you know, be actually correct)
- * - add startup_params
+ * - fix usernotes to correctly save to flash
  * - fixes issue with usernotes killing pattern lines
+ * - add startup_params
  * - cleaned up debug printing, increased dbgstr size from 30 to 50 bytes
  *
  * Differences from blink1mk3-test1:
@@ -118,8 +119,8 @@ uint8_t ledn;
 
 
 
-//#if DEBUG
-#if 1
+#if DEBUG
+//#if 1
 // used when sprintf()-ing to leuart
 char dbgstr[50];
 // for tiny printf
@@ -135,20 +136,26 @@ void myputc ( void* p, char c) {
 #endif
 
 
+
 // number of entries a color pattern can contain
 #define PATT_MAX_RAM 32
 #define PATT_MAX_FLASH 16  // originally could only store 16
 
 /*
  * "Notes" are user-writable and -readable blobs of data
+ * report2 size is 60 bytes (must be mult of 4, must be <64 for feature report)
+ * byte 0 reportid
+ * byte 1 cmd
+ * byte 3 noteid
+ * byte 4-59 notedata == 55 bytes
  *
- * Note size = 100
- * Note count = 10
+ * Note size = 50
+ * Note count = 20
  * Total size = 1000 < FLASH_PAGE_SIZE = 1024
  * .userNotesFlashSection is in flash at address 0xf800 (64k - (2*1k)) 
  */
 #define NOTE_SIZE 50
-#define NOTE_COUNT 20
+#define NOTE_COUNT 10
 
 // what is in a note
 typedef struct {
@@ -210,16 +217,23 @@ const userflash_t userFlash = {
 //uint32_t *notesFlashStartAddress = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
 //uint32_t *userNotesFlash = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
 __attribute__ ((section(".userNotesFlashSection")))
-const usernote_t userNotesFlash[] = {
+const usernote_t userNotesFlash[NOTE_COUNT] = {
   {"this is a test note"},
-  {"here is another test note"}
+  {"here is another test note"},
+  {"This is a max size note. Note length is 50 bytes.!"}
+  //01234567890123456789012345678901234567890123456789
+  //          1         2         3         4
 };
 
 // In-memory copy of nonvolatile notes
-usernote_t userNotes[NOTE_COUNT];
+// must be word-aligned because that's what MSC_WriteWord() needs
+SL_ALIGN(4)
+usernote_t userNotes[NOTE_COUNT] SL_ATTRIBUTE_ALIGN(4);
 
 // in-memory copy of non-volatile pattern
-patternline_t pattern[PATT_MAX_RAM];
+// must be word-aligned because that's what MSC_WriteWord() needs
+SL_ALIGN(4)
+patternline_t pattern[PATT_MAX_RAM] SL_ATTRIBUTE_ALIGN(4);
 
 
 uint8_t playpos   = 0; // current play position

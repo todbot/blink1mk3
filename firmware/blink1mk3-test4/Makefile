@@ -159,5 +159,8 @@ size:
 	arm-none-eabi-size  $(TARGET).elf
 
 nm:
-	arm-none-eabi-nm -n $(TARGET).elf 
+	arm-none-eabi-nm -S --numeric-sort -s $(TARGET).elf
+
+#nm:
+#	arm-none-eabi-nm -n $(TARGET).elf 
 
