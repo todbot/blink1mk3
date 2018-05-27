@@ -30,10 +30,10 @@
 // set the current color OF ALL LEDs
 void rgb_setCurr( rgb_t* newcolor );
 
-void rgb_setDestN( rgb_t* newcolor, int steps, int ledn );
+void rgb_setDestN( rgb_t* newcolor, int steps, int16_t ledn );
 
 // set a new destination color
-void rgb_setDest( rgb_t* newcolor, int steps, int ledn  );
+void rgb_setDest( rgb_t* newcolor, int steps, int16_t ledn  );
 
 // call at every tick
 void rgb_updateCurrent(void);
@@ -60,7 +60,7 @@ void rgb_setCurr( rgb_t* newcolor )
 }
 
 //
-void rgb_setDestN( rgb_t* newcolor, int steps, int ledn )
+void rgb_setDestN( rgb_t* newcolor, int steps, int16_t ledn )
 {
     rgbfader_t* f = &fader[ledn];
     f->dest100x.r = newcolor->r * 100;
@@ -75,7 +75,7 @@ void rgb_setDestN( rgb_t* newcolor, int steps, int ledn )
 }
 
 // set a new destination color
-void rgb_setDest( rgb_t* newcolor, int steps, int ledn  )
+void rgb_setDest( rgb_t* newcolor, int steps, int16_t ledn  )
 {
     if (ledn > 0) {
         rgb_setDestN(newcolor, steps, ledn - 1);

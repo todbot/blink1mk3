@@ -13,16 +13,16 @@ typedef struct {
 // RGB triplet unsigned ints for internal use of 100x scale
 // used instead of floating point
 typedef struct {
-    int g;
-    int r;
-    int b;
+    int16_t g;
+    int16_t r;
+    int16_t b;
 } rgbint_t;
 
 typedef struct {
     rgbint_t dest100x;  // the eventual destination color we want to hit
     rgbint_t step100x;  // the amount of to move each tick
     rgbint_t curr100x;  // the current color, times 10 (to lessen int trunc issue)
-    int stepcnt;
+    int16_t stepcnt;
 } rgbfader_t;
 
 typedef struct {
