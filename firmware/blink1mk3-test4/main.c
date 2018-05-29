@@ -213,9 +213,7 @@ const userflash_t userFlash = {
 };
 
 // Flash save of userNotes
-//uint8_t userNotesData[NOTE_SIZE*NOTE_COUNT]; // FIXME: can we do it not in RAM?
-//uint32_t *notesFlashStartAddress = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
-//uint32_t *userNotesFlash = (uint32_t *)(FLASH_SIZE - FLASH_PAGE_SIZE);
+// can at most be FLASH_PAGE_SIZE big (1024 bytes)
 __attribute__ ((section(".userNotesFlashSection")))
 const usernote_t userNotesFlash[NOTE_COUNT] = {
   {"this is a test note"},
@@ -628,12 +626,18 @@ int main()
   WDOG->CTRL = 0;
   
   //CMU_ClockEnable(cmuClock_DMA, true);  
+  // USART is a HFPERCLK peripheral. Enable HFPERCLK domain and USART0.
+  CMU_ClockEnable(cmuClock_HFPER, true);  
   CMU_ClockEnable(cmuClock_USART0, true);  
   // Switch on the clock for GPIO. Even though there's no immediately obvious
   // timing stuff going on beyond the SysTick below, it still needs to be
   // enabled for the GPIO to work.
   CMU_ClockEnable(cmuClock_GPIO, true);
-  
+
+  // Fix the fact that Tomu bootloader doesn't reset pin state
+  GPIO_PinModeSet(gpioPortA, 0, gpioModeDisabled, 0);
+  GPIO_PinModeSet(gpioPortB, 7, gpioModeDisabled, 0);
+
   // Sets up and enable the `SysTick_Handler' interrupt to fire once every 1ms.
   // ref: http://community.silabs.com/t5/Official-Blog-of-Silicon-Labs/Chapter-5-MCU-Clocking-Part-2-The-SysTick-Interrupt/ba-p/145297
   if (SysTick_Config(CMU_ClockFreqGet(cmuClock_CORE) / 1000)) {

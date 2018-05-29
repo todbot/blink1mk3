@@ -15,6 +15,7 @@
 
 
 #if defined BOARD_TYPE_BLINK1MK3
+#pragma message("Board Type BLINK1MK3")
 // --- blink1mk3
 #define USART0_LOCATION USART_ROUTE_LOCATION_LOC4
 #define USART0_TXPORT   gpioPortB
@@ -23,6 +24,7 @@
 #define USART0_CLKPIN   13        // but ununsed here
 
 #elif defined BOARD_TYPE_TOMU
+#pragma message("Board Type BLINK1MK3")
 // --- tomu board
 #define USART0_LOCATION USART_ROUTE_LOCATION_LOC3
 #define USART0_TXPORT   gpioPortE
@@ -30,7 +32,8 @@
 #define USART0_CLKPORT  gpioPortC // but ununsed here
 #define USART0_CLKPIN   15        // but ununsed here
 
-#elif defined BOARD_TYPE_EFM32HGDEVKIT
+#elif defined BOARD_TYPE == BOARD_EFM32HGDEVKIT
+#pragma message("Board Type EFM32HGDEVKIT")
 // --- efm32hg dev board
 #define USART0_LOCATION USART_ROUTE_LOCATION_LOC0
 #define USART0_TXPORT   gpioPortE
@@ -39,7 +42,7 @@
 #define USART0_CLKPIN   12
 
 #else
-#error "BORARD_TYPE_... not defined"
+#error "BOARD_TYPE_... not defined"
 #endif
 
 

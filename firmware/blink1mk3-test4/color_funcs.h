@@ -14,6 +14,7 @@
 // 1 byte  - stepcnt
 // === 19 bytes
 // => 8 LEDs = 8*19 = 152 bytes
+// => 18 LEDS = 18*19 = 342 bytes
 //
 //
 
@@ -59,7 +60,7 @@ void rgb_setCurr( rgb_t* newcolor )
     //displayLEDs();
 }
 
-//
+// set a 
 void rgb_setDestN( rgb_t* newcolor, int steps, int16_t ledn )
 {
     rgbfader_t* f = &fader[ledn];
@@ -75,6 +76,7 @@ void rgb_setDestN( rgb_t* newcolor, int steps, int16_t ledn )
 }
 
 // set a new destination color
+// if ledn == 0 then set all
 void rgb_setDest( rgb_t* newcolor, int steps, int16_t ledn  )
 {
     if (ledn > 0) {
@@ -92,7 +94,7 @@ void rgb_updateCurrent(void)
     for( uint8_t i=0; i<nLEDs; i++ ) {
         //rgbfader_t f = fader[i];
         rgbfader_t* f = &fader[i];
-        if( !f->stepcnt ) {
+        if( f->stepcnt == 0 ) { // no more steps left
             continue;
         }
         f->stepcnt--;
@@ -100,7 +102,7 @@ void rgb_updateCurrent(void)
             f->curr100x.r += f->step100x.r;
             f->curr100x.g += f->step100x.g;
             f->curr100x.b += f->step100x.b;
-        } else {
+        } else {  // at destination, so set current
             f->curr100x.r = f->dest100x.r;
             f->curr100x.g = f->dest100x.g;
             f->curr100x.b = f->dest100x.b;
