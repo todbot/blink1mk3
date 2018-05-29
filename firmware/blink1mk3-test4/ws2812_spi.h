@@ -52,7 +52,8 @@ static void ws2812_setupSpi(void)
   
   // Initialize SPI 
   usartInit.databits = usartDatabits12;
-  usartInit.baudrate = 2400000; // 2.4MHz
+  //usartInit.baudrate = 2400000; // 2.4MHz
+  usartInit.baudrate = 3000000;  // 3.0 MHz for SK6812mini (works for WS2812 too apparently)
   usartInit.msbf = true;
 
   USART_InitSync(USART0, &usartInit);
