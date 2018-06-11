@@ -162,7 +162,7 @@ static void busy_wait(int count)
 #define TOGGLE_CAP1A() (GPIO->P[2].DOUTTGL = (1 << 1)) // PC1
 // for BOARD_TYPE_BLINK1
 #define READ_SWDCLK() (GPIO->P[5].DIN & (1 << 0))   // PF0 == SWDCLK
-#define TOGGLE_SWDIO() (GPIO->P[5].DOUTGL = (1<<1)) // PF1 == SWDIO
+#define TOGGLE_SWDIO() (GPIO->P[5].DOUTTGL = (1<<1)) // PF1 == SWDIO
 
 int test_pin_short(const struct toboot_configuration *cfg)
 {
@@ -177,14 +177,14 @@ int test_pin_short(const struct toboot_configuration *cfg)
         return 0;
     }
 
-#ifdef BOART_TYPE_BLINK1
-
+#ifdef BOARD_TYPE_BLINK1
+#pragma message "compiling for blink1"
     // Mux PF1 (output)
     GPIO->P[5].MODEL &= ~_GPIO_P_MODEL_MODE1_MASK;
     GPIO->P[5].MODEL |= GPIO_P_MODEL_MODE1_PUSHPULL;
     // Mux PF0 (input)
-    GPIO->P[5].MODEH &= ~_GPIO_P_MODEH_MODE0_MASK;
-    GPIO->P[5].MODEH |= GPIO_P_MODEH_MODE0_INPUTPULL;
+    GPIO->P[5].MODEL &= ~_GPIO_P_MODEL_MODE0_MASK;
+    GPIO->P[5].MODEL |= GPIO_P_MODEL_MODE0_INPUTPULL;
     busy_wait(20);
 
     GPIO->P[5].DOUTSET = (1 << 1); // Set PF1 SWDIO high
@@ -201,7 +201,7 @@ int test_pin_short(const struct toboot_configuration *cfg)
 
     TOGGLE_SWDIO();
     busy_wait(15);
-    samples[2] = READ_SWDCLK();
+    samples[3] = READ_SWDCLK();
 
 #else
 
