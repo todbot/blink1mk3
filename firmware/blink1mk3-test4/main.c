@@ -36,16 +36,17 @@
 #include <em_system.h>
 
 #include <stdint.h>
+#include <stdlib.h> // rand()
 #include <stdbool.h>
 
 #define DEBUG 1
 
-#define BOARD_TYPE_BLINK1MK3
-//#define BOARD_TYPE_TOMU 
+#define BOARD_TYPE_BLINK1MK3 // B7
+//#define BOARD_TYPE_TOMU    // E13
 //#define BOARD_TYPE_EFM32HGDEVKIT
 
 // define this to print out cmd+args in handleMessage()
-#define DEBUG_HANDLEMESSAGE
+//#define DEBUG_HANDLEMESSAGE
 
 #include "toboot.h"
 #include "leuart.h"
@@ -491,7 +492,24 @@ static void updateLEDs(void)
             ctmp = pattern[playpos].color;
             ttmp = pattern[playpos].dmillis;
             ledn = pattern[playpos].ledn;
-#if 1
+
+            // special command handling
+            if( ledn & 0x80 ) { // special command bit
+              ledn = ledn & 0x7f; // mask off special command bit
+              // random
+              ledn = (rand() % ledn) +1 ; // 0 means all
+              uint8_t h = rand() % 255;
+              uint8_t s = ctmp.g;
+              uint8_t v = ctmp.b;
+              hsbtorgb( h,s,v, &ctmp.r, &ctmp.g, &ctmp.b );
+              //hsv_to_rgb( h,s,v, &ctmp.r, &ctmp.g, &ctmp.b);
+              
+              //ctmp.r = (uint8_t)(rand() % ctmp.r);
+              //ctmp.g = (uint8_t)(rand() % ctmp.g);
+              //ctmp.b = (uint8_t)(rand() % ctmp.b);
+            }
+            
+#if 0
             dbg_printf("%ld\n",millis());
 #endif
 #if 0            
@@ -560,35 +578,46 @@ static void updateMisc()
   //if( usbState == USBD_STATE_CONFIGURED ) {
   // usbHasBeenSetup = true;
   //}
-  
-  /*
+
+  // enabling this makes it impossible to go into bootloader mode, why?
+#if 0
   // Capture/sample the state of the capacitive touch sensors.
   CAPSENSE_Sense();
 
-    // Analyse the sample, and if the touch-pads on the green LED side is
-    // touched, rapid blink the green LED ten times.
-    if (CAPSENSE_getPressed(BUTTON0_CHANNEL) &&
-        !CAPSENSE_getPressed(BUTTON1_CHANNEL)) {
-      int i;
-      for (i = 10; i > 0; i--) {
-        GPIO_PinOutClear(gpioPortA, 0);
-        SpinDelay(100);
-        GPIO_PinOutSet(gpioPortA, 0);
-        SpinDelay(100);
-      }
+  if( CAPSENSE_getPressed(BUTTON0_CHANNEL) ) {
+    playing = 3 ; // sigh
+    setLED( 0, 255, 0, 2 );
+    
+  }
+#endif
+  
+  /*
+  // Analyse the sample, and if the touch-pads on the green LED side is
+  // touched, rapid blink the green LED ten times.
+  if (CAPSENSE_getPressed(BUTTON0_CHANNEL) &&
+      !CAPSENSE_getPressed(BUTTON1_CHANNEL)) {
+    
+    int i;
+    for (i = 10; i > 0; i--) {
+      GPIO_PinOutClear(gpioPortA, 0);
+      SpinDelay(100);
+      GPIO_PinOutSet(gpioPortA, 0);
+      SpinDelay(100);
+    }
     // Analyse the same sample, and if the touch-pads on the red LED side is
     // touched, rapid blink the red LED ten times.
-    } else if (CAPSENSE_getPressed(BUTTON1_CHANNEL) &&
-               !CAPSENSE_getPressed(BUTTON0_CHANNEL)) {
-      int i;
-      for (i = 10; i > 0; i--) {
-        GPIO_PinOutClear(gpioPortB, 7);
-        SpinDelay(100);
-        GPIO_PinOutSet(gpioPortB, 7);
-        SpinDelay(100);
-      }
+  } else if (CAPSENSE_getPressed(BUTTON1_CHANNEL) &&
+             !CAPSENSE_getPressed(BUTTON0_CHANNEL)) {
+    int i;
+    for (i = 10; i > 0; i--) {
+      GPIO_PinOutClear(gpioPortB, 7);
+      SpinDelay(100);
+      GPIO_PinOutSet(gpioPortB, 7);
+      SpinDelay(100);
     }
+  }
   */
+
 }
 
 
@@ -638,6 +667,10 @@ int main()
   GPIO_PinModeSet(gpioPortA, 0, gpioModeDisabled, 0);
   GPIO_PinModeSet(gpioPortB, 7, gpioModeDisabled, 0);
 
+  // Enable the capacitive touch sensor. Remember, this consumes TIMER0 and
+  // TIMER1, so those are off-limits to us.
+  CAPSENSE_Init();
+
   // Sets up and enable the `SysTick_Handler' interrupt to fire once every 1ms.
   // ref: http://community.silabs.com/t5/Official-Blog-of-Silicon-Labs/Chapter-5-MCU-Clocking-Part-2-The-SysTick-Interrupt/ba-p/145297
   if (SysTick_Config(CMU_ClockFreqGet(cmuClock_CORE) / 1000)) {
@@ -672,11 +705,6 @@ int main()
   
   notesLoadAll();
   
-  
-  // Enable the capacitive touch sensor.
-  // Remember, this consumes TIMER0 and TIMER1, so those are off-limits to us.
-  //CAPSENSE_Init();
-
   makeSerialNumber();  // Make USB serial number from chip unique Id
   
   hidDescriptor = (void*) USBDESC_HidDescriptor; // FIXME

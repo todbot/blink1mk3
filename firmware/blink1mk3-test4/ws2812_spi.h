@@ -24,7 +24,7 @@
 #define USART0_CLKPIN   13        // but ununsed here
 
 #elif defined BOARD_TYPE_TOMU
-#pragma message("Board Type BLINK1MK3")
+#pragma message("Board Type TOMU")
 // --- tomu board
 #define USART0_LOCATION USART_ROUTE_LOCATION_LOC3
 #define USART0_TXPORT   gpioPortE
