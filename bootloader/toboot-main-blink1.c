@@ -9,6 +9,7 @@
 // - "button press" is by shorting PF1 & PF0 (SWDIO & SWDCLK)
 // - no red/green LEDs
 #define BOARD_TYPE_BLINK1
+// otherwise it's a Tomu board
 
 #define AUTOBAUD_TIMER_CLOCK CMU_HFPERCLKEN0_TIMER0
 #define BOOTLOADER_USART_CLOCKEN 0
@@ -25,10 +26,9 @@ void RTC_Handler(void)
     // Clear interrupt flag
     RTC->IFC = RTC_IFC_COMP1 | RTC_IFC_COMP0 | RTC_IFC_OF;
 
+    // FIXME: eventually do ws2812 leds
 #ifdef BOARD_TYPE_BLINK1
 
-    // FIXME: eventually do ws2812 leds
-    
     // Toggle the green LED
     GPIO->P[0].DOUTTGL = (1 << 0);
 
@@ -108,12 +108,12 @@ void __early_init(void)
     // FIXME: change this to be set up ws2812 LEDs
     GPIO->P[0].MODEL &= ~_GPIO_P_MODEL_MODE0_MASK;
     GPIO->P[0].MODEL |= GPIO_P_MODEL_MODE0_WIREDAND;
-    GPIO->P[0].DOUTSET = (1 << 0);
+    GPIO->P[0].DOUTCLR = (1 << 0);
 
     // Mux PB7 (Red LED)
     GPIO->P[1].MODEL &= ~_GPIO_P_MODEL_MODE7_MASK;
     GPIO->P[1].MODEL |= GPIO_P_MODEL_MODE7_WIREDAND;
-    GPIO->P[1].DOUTCLR = (1 << 7);
+    GPIO->P[1].DOUTSET = (1 << 7);
 #else
     // Mux things
     // Mux PA0 (Green LED)
@@ -158,11 +158,11 @@ static void busy_wait(int count)
 }
 
 // for standard Tomu
-#define READ_CAP0B() (GPIO->P[4].DIN & (1 << 12))      // PE12
+#define READ_CAP0B()   (GPIO->P[4].DIN & (1 << 12))    // PE12
 #define TOGGLE_CAP1A() (GPIO->P[2].DOUTTGL = (1 << 1)) // PC1
 // for BOARD_TYPE_BLINK1
-#define READ_SWDCLK() (GPIO->P[5].DIN & (1 << 0))   // PF0 == SWDCLK
-#define TOGGLE_SWDIO() (GPIO->P[5].DOUTTGL = (1<<1)) // PF1 == SWDIO
+#define READ_SWDIO()    (GPIO->P[5].DIN & (1 << 1))   // PF1 == SWDIO  // input
+#define TOGGLE_SWDCLK() (GPIO->P[5].DOUTTGL = (1 << 0)) // PF0 == SWDCLK // output
 
 int test_pin_short(const struct toboot_configuration *cfg)
 {
@@ -174,37 +174,41 @@ int test_pin_short(const struct toboot_configuration *cfg)
     // Test if thos entry method has been locked out.
     if (cfg->lock_entry == TOBOOT_LOCKOUT_MAGIC)
     {
-        return 0;
+      //return 0;
     }
 
 #ifdef BOARD_TYPE_BLINK1
 #pragma message "compiling for blink1"
-    // Mux PF1 (output)
-    GPIO->P[5].MODEL &= ~_GPIO_P_MODEL_MODE1_MASK;
-    GPIO->P[5].MODEL |= GPIO_P_MODEL_MODE1_PUSHPULL;
-    // Mux PF0 (input)
+    GPIO->ROUTE = 0; // disable SWD interface
+    
+    // Mux PF0 (output) SWDCLK
     GPIO->P[5].MODEL &= ~_GPIO_P_MODEL_MODE0_MASK;
-    GPIO->P[5].MODEL |= GPIO_P_MODEL_MODE0_INPUTPULL;
+    GPIO->P[5].MODEL |= GPIO_P_MODEL_MODE0_PUSHPULL;
+    // Mux PF1 (input) SWDIO
+    GPIO->P[5].MODEL &= ~_GPIO_P_MODEL_MODE1_MASK;
+    GPIO->P[5].MODEL |= GPIO_P_MODEL_MODE1_INPUTPULL;
     busy_wait(20);
 
-    GPIO->P[5].DOUTSET = (1 << 1); // Set PF1 SWDIO high
+    GPIO->P[5].DOUTSET = (1 << 0); // Set PF0 SWDCLK high 
     busy_wait(15);
-    samples[0] = READ_SWDCLK();    // Read PF0 SWDCLK 
+    samples[0] = READ_SWDIO();    // Read PF1 SWDIO 
 
-    TOGGLE_SWDIO();
+    TOGGLE_SWDCLK();
     busy_wait(15);
-    samples[1] = READ_SWDCLK();
+    samples[1] = READ_SWDIO();
 
-    TOGGLE_SWDIO();
+    TOGGLE_SWDCLK();
     busy_wait(15);
-    samples[2] = READ_SWDCLK();
+    samples[2] = READ_SWDIO();
 
-    TOGGLE_SWDIO();
+    TOGGLE_SWDCLK();
     busy_wait(15);
-    samples[3] = READ_SWDCLK();
-
+    samples[3] = READ_SWDIO();
+    
+    GPIO->ROUTE = _GPIO_ROUTE_RESETVALUE; // re-enable SWD interface
 #else
-
+#pragma message "compiling for Tomu"
+    
     // Mux PC1 (Outer edge pad)
     GPIO->P[2].MODEL &= ~_GPIO_P_MODEL_MODE1_MASK;
     GPIO->P[2].MODEL |= GPIO_P_MODEL_MODE1_PUSHPULL;
