@@ -179,7 +179,7 @@ int test_pin_short(const struct toboot_configuration *cfg)
 
 #ifdef BOARD_TYPE_BLINK1
 #pragma message "compiling for blink1"
-    GPIO->ROUTE = 0; // disable SWD interface
+    GPIO->ROUTE = 0; // disable SWD interface so PF1 & PF0 work as GPIO
     
     // Mux PF0 (output) SWDCLK
     GPIO->P[5].MODEL &= ~_GPIO_P_MODEL_MODE0_MASK;
