@@ -8,7 +8,7 @@
 </settings>
 <grid distance="0.1" unitdist="mm" unit="mm" style="lines" multiple="1" display="no" altdistance="1" altunitdist="mm" altunit="mm"/>
 <layers>
-<layer number="1" name="Top" color="4" fill="1" visible="no" active="yes"/>
+<layer number="1" name="Top" color="4" fill="1" visible="yes" active="yes"/>
 <layer number="2" name="Route2" color="1" fill="3" visible="no" active="no"/>
 <layer number="3" name="Route3" color="4" fill="3" visible="no" active="no"/>
 <layer number="4" name="Route4" color="1" fill="4" visible="no" active="no"/>
@@ -3375,6 +3375,13 @@ design rules under a new name.</description>
 <vertex x="10.706" y="0"/>
 <vertex x="0" y="0"/>
 </polygon>
+<wire x1="4.2" y1="5.025" x2="3.075" y2="5.025" width="0.1524" layer="16"/>
+<wire x1="3.075" y1="5.025" x2="2.75" y2="4.7" width="0.1524" layer="16"/>
+<wire x1="7.025" y1="7.2" x2="9.2" y2="5.675" width="0" layer="19" extent="16-16"/>
+<wire x1="4.2" y1="5.025" x2="7.025" y2="7.2" width="0" layer="19" extent="16-16"/>
+<wire x1="4.2" y1="3.075" x2="4.2" y2="5.025" width="0" layer="19" extent="16-16"/>
+<wire x1="5.075" y1="2.2" x2="4.2" y2="3.075" width="0" layer="19" extent="16-16"/>
+<wire x1="7.025" y1="2.2" x2="5.075" y2="2.2" width="0" layer="19" extent="16-16"/>
 </signal>
 <signal name="VDEC">
 <contactref element="C1" pad="1"/>
