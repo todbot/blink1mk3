@@ -41,9 +41,9 @@
 
 #define DEBUG 1
 
-#define BOARD_TYPE BOARD_TYPE_BLINK1MK3      // B7
-//#define BOARD_TYPE BOARD_TYPE_TOMU         // E13
-//#define BOARD_TYPE BOARD_TYPE_EFM32HGDEVKIT // E10
+#define BOARD_TYPE BOARD_TYPE_BLINK1MK3       // ws2812 data out on B7
+//#define BOARD_TYPE BOARD_TYPE_TOMU          // ws2812 data out on E13
+//#define BOARD_TYPE BOARD_TYPE_EFM32HGDEVKIT // ws2812 data out on E10
 
 // define this to print out cmd+args in handleMessage()
 //#define DEBUG_HANDLEMESSAGE
