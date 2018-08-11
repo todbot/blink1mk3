@@ -250,7 +250,7 @@ STATIC_CONST_STRING_DESC_LANGID( langID, 0x04, 0x09 );
 STATIC_CONST_STRING_DESC( iManufacturer, 'T','h','i','n','g','M');
                           
 STATIC_CONST_STRING_DESC( iProduct     , 'b','l','i','n','k','(','1',')',' ','m','k','3',
-                                         ' ','0','0','4');
+                                         ' ','0','0','5');
 STATIC_CONST_STRING_DESC( iInterface   , 'b','l','i','n','k','1',' ', 'h','i','d');
 
 //STATIC_CONST_STRING_DESC( iSerialNumber, '2','2','0','0','1','2','3','4' );

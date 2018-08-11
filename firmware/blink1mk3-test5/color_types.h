@@ -31,7 +31,7 @@ typedef struct {
     rgb_t color;
     uint16_t dmillis; // hundreths of a sec
     uint8_t ledn;     // number of led, or 0 for all
-} patternline_t;
+} patternline_t;  // 3 + 2 + 1 = 6 bytes per pattern line
 
 // what is this for exactly? only used in off()?
 #define setRGBt(rgbt,x,y,z) { rgbt.r=x; rgbt.g=y; rgbt.b=z; }

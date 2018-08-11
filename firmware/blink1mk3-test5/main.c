@@ -5,8 +5,10 @@
  * 2018 Tod E. Kurt, http://todbot.com/blog/
  *
  * Differences from blink1mk3-test4:
+ * - Implements serverdown logic
  * - 
- * - 
+ * - Uses PLAY_ enum
+ *
  * Differences from blink1mk3-test3:
  * - fixed two-report HID descriptor to work on Windows (and you know, be actually correct)
  * - fix usernotes to correctly save to flash
@@ -21,6 +23,25 @@
  *
  *
  ********************************************************************************************/
+
+/*
+ * Flash Memory Layout
+ * -------------
+ * 0x0000 \ 
+ * ...     |- DFU bootlaoder (16 kB)
+ * 0x3FFF /
+ * 0x4000 \ 
+ * ..      -- blink1 program code (46 kB == 64kB - 1kB - 1kB - 16kB)
+ * 0xF7FF /
+ * 0xF800 \
+ * ...     -- User-specified text notes (1 kB)
+ * 0xFBFF /
+ * 0xFC00 \
+ * ...     -- User-specified color patterns (1 kB)
+ * 0xFFFF /
+ * 
+ * See "blink1mk3.ld" for details
+ */
 
 #include "capsense.h"
 #include "usbconfig.h"
@@ -42,25 +63,29 @@
 #include <stdlib.h> // rand()
 #include <stdbool.h>
 
-#define DEBUG 1
+
+#define blink1_version_major '3'
+#define blink1_version_minor '1'
+
+#define DEBUG 1    // enable debug messages output via LEUART
+// define this to print out cmd+args in handleMessage()
+//#define DEBUG_HANDLEMESSAGE
 
 #define BOARD_TYPE BOARD_TYPE_BLINK1MK3       // ws2812 data out on B7
 //#define BOARD_TYPE BOARD_TYPE_TOMU          // ws2812 data out on E13
 //#define BOARD_TYPE BOARD_TYPE_EFM32HGDEVKIT // ws2812 data out on E10
 
-// define this to print out cmd+args in handleMessage()
-//#define DEBUG_HANDLEMESSAGE
+#define nLEDs 18   // number of LEDS
+
+#include "leuart.h"
+#include "debug.h"
 
 #include "toboot.h"
-#include "leuart.h"
 #include "tinyprintf.h"
 #include "ws2812_spi.h"
 #include "descriptors.h"
 #include "color_types.h"
 
-
-#define blink1_version_major '3'
-#define blink1_version_minor '1'
 
 // forward decls
 void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n);
@@ -68,13 +93,11 @@ static inline void displayLEDs(void);
 static void off();
 #define setLEDsAll(r,g,b) { setLED(r,g,b, 255); } // 255 means all
 
-#define nLEDs 18
 
 // allocate faders, one per LED
 rgbfader_t fader[nLEDs];
 
 #include "color_funcs.h"   // needs setLED(), nLEDs, fader[] defined
-
 
 
 extern struct toboot_runtime toboot_runtime;
@@ -112,38 +135,20 @@ typedef struct {
     uint8_t bootmode;  // ledn, bootmode_t enum above
 } startup_params_t;
 
-startup_params_t startup_params;
-
 // array of LED data (sent to LEDs)
 rgb_t leds[nLEDs];  
-
 
 // global which is active LED
 uint8_t ledn;
 
-
-
-#if DEBUG
-//#if 1
-// used when sprintf()-ing to leuart
-char dbgstr[50];
-// for tiny printf
-void myputc ( void* p, char c) {
-  (void)p;  write_char(c);
-}
-// a debug printf out the leuart
-#define dbg_printf(fmt,...) sprintf(dbgstr,fmt,__VA_ARGS__); write_str(dbgstr);
-#define dbg_str(s) write_str(s)
-#else
-#define dbg_printf(fmt,...)
-#define dbg_str(s)
-#endif
-
-
-
 // number of entries a color pattern can contain
-#define PATT_MAX_RAM 32
-#define PATT_MAX_FLASH 16  // originally could only store 16
+#define PATT_MAX 32
+
+// define what is in the user data section
+typedef struct {
+  startup_params_t startup_params;
+  patternline_t pattern[PATT_MAX];
+} userdata_t;
 
 /*
  * "Notes" are user-writable and -readable blobs of data
@@ -159,36 +164,40 @@ void myputc ( void* p, char c) {
  * .userNotesFlashSection is in flash at address 0xf800 (64k - (2*1k)) 
  */
 #define NOTE_SIZE 50
-#define NOTE_COUNT 10
+#define NOTE_COUNT 20
 
-// what is in a note
+// define what is in a user note
 typedef struct {
   char note[NOTE_SIZE];  // just a string for now
 } usernote_t;
 
+// just an idea, make the entire notes block its own struct
+//typedef struct {
+//  usernote_t notes[NOTE_COUNT]
+//} usernotes_t;
+
 /*
- * Flash / non-volatile color pattern
+ * Flash / non-volatile user data & user color pattern
  *
  * 6 bytes / patternline (fade is 2bytes)
  * => 1024 bytes / 6 = 170 pattern lines potentially (or 10 16-line patterns =960 bytes)
  *
  * FLASH_PAGE_SIZE = 1024 (Gecko_SDK/platform/Device/SiliconLabs/EFM32HG/Include/efm32hg309f64.h)
  * FLASH_SIZE = 65536 (64k)
- * .patternFlashSection is in flash at address 0xfc00 (64k - (1*1k)) 
+ * .userFlashSection is in flash at address 0xfc00 (64k - (1*1k)) 
  */
 //uint32_t *patterFlashAddress = (uint32_t *)(FLASH_SIZE - (2*FLASH_PAGE_SIZE));
 
-typedef struct { 
-  patternline_t pattern[PATT_MAX_FLASH];
-  startup_params_t startup_params;
-} userflash_t;
-
-// make it quicker to access flash pattern
-#define patternFlash userFlash.pattern
-
-// Flash save of LED pattern
-__attribute__ ((section(".patternFlashSection")))
-const userflash_t userFlash = {
+// Flash copy of user startup params and LED patterns
+// can at most be FLASH_PAGE_SIZE big (1024 bytes)
+__attribute__ ((section(".userFlashSection")))
+const userdata_t userFlash = {
+  {
+    .playstart = 0,
+    .playend = 0,
+    .playcount = 0,
+    .bootmode = BOOT_NORMAL
+  },
   {
     //    G     R     B    fade ledn
     { { 0x00, 0xff, 0x00 },  50, 1 }, // 0  red A
@@ -208,15 +217,9 @@ const userflash_t userFlash = {
     { { 0x00, 0x00, 0x00 }, 100, 2 }, // 14 off B
     { { 0x00, 0x00, 0x00 }, 100, 0 }, // 15 off everyone
   },
-  {
-    .playstart = 0,
-    .playend = 0,
-    .playcount = 0,
-    .bootmode = BOOT_NORMAL
-  },
 };
 
-// Flash save of userNotes
+// Flash copy of userNotes
 // can at most be FLASH_PAGE_SIZE big (1024 bytes)
 __attribute__ ((section(".userNotesFlashSection")))
 const usernote_t userNotesFlash[NOTE_COUNT] = {
@@ -227,22 +230,35 @@ const usernote_t userNotesFlash[NOTE_COUNT] = {
   //          1         2         3         4
 };
 
-// In-memory copy of nonvolatile notes
+// RAM copy of non-volatile notes
 // must be word-aligned because that's what MSC_WriteWord() needs
 SL_ALIGN(4)
 usernote_t userNotes[NOTE_COUNT] SL_ATTRIBUTE_ALIGN(4);
 
-// in-memory copy of non-volatile pattern
+// RAM copy of non-volatile startup params & color pattern
 // must be word-aligned because that's what MSC_WriteWord() needs
 SL_ALIGN(4)
-patternline_t pattern[PATT_MAX_RAM] SL_ATTRIBUTE_ALIGN(4);
+userdata_t userData SL_ATTRIBUTE_ALIGN(4);
 
+
+uint8_t playstart_serverdown = 0;        // start play position for serverdown
+uint8_t playend_serverdown   = PATT_MAX; // end play position for serverdown 
 
 uint8_t playpos   = 0; // current play position
 uint8_t playstart = 0; // start play position
-uint8_t playend   = PATT_MAX_RAM; // end play position
+uint8_t playend   = PATT_MAX; // end play position
 uint8_t playcount = 0; // number of times to play loop, or 0=infinite
-uint8_t playing; // playing values: 0 = off, 1 = normal, 2 == playing from powerup playing=3 direct led addressing FIXME: this is dumb
+
+// play modes, valid values for "playing"
+enum { 
+    PLAY_OFF       = 0,  // off
+    PLAY_ON        = 1,  // normal playing pattern
+    PLAY_POWERUP   = 2,  // playing from a powerup
+    PLAY_DIRECTLED = 3   // direct LED addressing (FIXME: this is dumb)
+};
+
+uint8_t playing; // playing values: as above enum
+
 bool doPatternWrite = false;
 
 patternline_t ptmp;  // temp pattern holder
@@ -271,18 +287,18 @@ bool usbHasBeenSetup = false;
 // for sending back HID Descriptor in setupCmd
 static void  *hidDescriptor = NULL;
 
-// The report packet received from the host
+// The USB report packet received from the host
 // could be REPORT_COUNT or REPORT2_COUNT long
 // first byte is reportId
 SL_ALIGN(4)
 static uint8_t  inbuf[REPORT2_COUNT] SL_ATTRIBUTE_ALIGN(4);
 
-// The report packet to send to the host 
+// The USB report packet to send to the host 
 // generally it's a copy of the last report received, then modified
 SL_ALIGN(4)
 static uint8_t reportToSend[REPORT2_COUNT] SL_ATTRIBUTE_ALIGN(4);
 
-// forward decl for callbacks struct
+// forward declaration for callbacks struct
 int setupCmd(const USB_Setup_TypeDef *setup);
 void stateChange(USBD_State_TypeDef oldState, USBD_State_TypeDef newState);
 
@@ -315,18 +331,18 @@ static const USBD_Init_TypeDef initstruct =
  * main() further below).
  * It provides the equivalent of "millis()" in the variable "uptime_millis", 
  * but it does roll-over 
+ * It must be called "SysTick_Handler"
  */
 void SysTick_Handler() {
   uptime_millis++;
 }
-
+// ease-of-use function because I'm used to Arduino
 #define millis() (uptime_millis)
 
-/* simple delay() -- don't use this normally */
+/* simple delay() -- don't use this normally because it spinlocks the CPU*/
 static void SpinDelay(uint32_t millis) {
   // Calculate the time at which we need to finish "sleeping".
   uint32_t sleep_until = uptime_millis + millis; 
-
   // Spin until the requested time has passed.
   while (uptime_millis < sleep_until);
 }
@@ -348,20 +364,32 @@ static void rebootToBootloader()
 // --------------------------------------------------------
 
 /*********************************
- * Save current RAM pattern to flash 
+ * Save current RAM pattern & startup params to flash 
  *********************************/
-static void writePatternFlash()
+static void userDataSave()
 {
   MSC_Init();
-  MSC_ErasePage((uint32_t*)patternFlash); // must erase first
-  MSC_WriteWord((uint32_t*)patternFlash, pattern, FLASH_PAGE_SIZE);  // was &pattern (and why did that work?)
+  MSC_ErasePage((uint32_t*)&userFlash); // must erase first
+  MSC_WriteWord((uint32_t*)&userFlash, &userData, FLASH_PAGE_SIZE); 
   MSC_Deinit();
+}
+
+/*********************************
+ *
+ ********************************/
+static void userDataLoad()
+{
+  // Load userdata from flash to RAM
+  // includes startup params and color pattern
+  memset( &userData, 0, sizeof(userdata_t)); // zero out just in case
+  memcpy( &userData, &userFlash, sizeof(userdata_t)); // make this a loadUserDat() func?
 }
 
 /*********************************
  * Save RAM user notes to flash.
  *********************************/
-static void writeNotesFlash()
+//static void writeNotesFlash()
+static void notesSave()
 {
   MSC_Init();
   MSC_ErasePage((uint32_t*)userNotesFlash); // must erase first
@@ -424,7 +452,7 @@ static inline void displayLEDs(void)
  *********************************************************************/
 static void off(void)
 {
-    playing = 0;
+    playing = PLAY_OFF;
     setRGBt(ctmp, 0,0,0);  // starting color
     rgb_setCurr( &ctmp );  // set all LEDs FIXME: better way to do this?
 }
@@ -465,10 +493,10 @@ void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n)
  **********************************************************************/
 static void updateLEDs(void)
 {
-    //uint32_t now = uptime_millis;
+    uint32_t now = uptime_millis;
 
     // update LEDs every led_update_millis
-    if( (long)(millis() - led_update_next) > 0 ) {
+    if( (long)(now - led_update_next) > 0 ) {
         led_update_next += led_update_millis;
 
         rgb_updateCurrent();  // playing=3 => direct LED addressing (not anymore)
@@ -476,7 +504,7 @@ static void updateLEDs(void)
 #if 1
         // check for non-computer power up
         if( !usbHasBeenSetup ) {
-            if( !playing && millis() > 500 ) {  // 500 msec wait
+            if( !playing && now > 500 ) {  // 500 msec wait
                 playing = 2;
                 startPlaying();
             }
@@ -489,27 +517,33 @@ static void updateLEDs(void)
 #endif
     } // if led_update_next
 
+    // serverdown logic
+    if( serverdown_millis != 0 ) {  // i.e. servermode has been turned on
+        if( (long)(now - serverdown_update_next) > 0 ) {
+            serverdown_millis = 0;  // disable this check
+            playing = PLAY_ON;
+            playstart = playstart_serverdown;
+            playend   = playend_serverdown;
+            startPlaying();
+        }
+    }
+
     // playing light pattern
     if( playing ) {
         if( (long)(millis() - pattern_update_next) > 0  ) { // time to get next line
-            ctmp = pattern[playpos].color;
-            ttmp = pattern[playpos].dmillis;
-            ledn = pattern[playpos].ledn;
+            ctmp = userData.pattern[playpos].color;
+            ttmp = userData.pattern[playpos].dmillis;
+            ledn = userData.pattern[playpos].ledn;
 
             // special command handling
-            if( ledn & 0x80 ) { // special command bit
-              ledn = ledn & 0x7f; // mask off special command bit
+            if( ledn & 0x80 ) {    // special command bit
+              ledn = ledn & 0x7f;  // mask off special command bit
               // random
               ledn = (rand() % ledn) +1 ; // 0 means all
               uint8_t h = rand() % 255;
               uint8_t s = ctmp.g;
               uint8_t v = ctmp.b;
-              hsbtorgb( h,s,v, &ctmp.r, &ctmp.g, &ctmp.b );
-              //hsv_to_rgb( h,s,v, &ctmp.r, &ctmp.g, &ctmp.b);
-              
-              //ctmp.r = (uint8_t)(rand() % ctmp.r);
-              //ctmp.g = (uint8_t)(rand() % ctmp.g);
-              //ctmp.b = (uint8_t)(rand() % ctmp.b);
+              hsbtorgb( h,s,v, &ctmp.r, &ctmp.g, &ctmp.b );  // NOTE: writes to ctmp.{r,g,b}
             }
             
 #if 0
@@ -530,7 +564,7 @@ static void updateLEDs(void)
                 playpos = playstart; // loop the pattern
                 playcount--;
                 if( playcount == 0 ) {
-                    playing=0; // done!
+                    playing = PLAY_OFF; // done!
                 }
                 else if(playcount==255) {
                     playcount = 0; // infinite playing
@@ -547,7 +581,7 @@ static void updateLEDs(void)
  **********************************************************************/
 static void updateMisc()
 {
-  if( (uptime_millis - last_misc_millis) > 500 ) {
+  if( (uptime_millis - last_misc_millis) > 500 ) {  // only run this every 500 msecs
     last_misc_millis = millis(); //uptime_millis;
     //write_char('.');  //write_char('0'+usbState);
     // print out heartbeats that are also our USB state:
@@ -566,14 +600,14 @@ static void updateMisc()
   if( doNotesWrite ) {
     doNotesWrite = false;
     dbg_str("writing userNotes...");
-    writeNotesFlash();
+    notesSave();
     dbg_str("wrote userNotes");
   }
   
   if( doPatternWrite ) {
     doPatternWrite = false;
-    writePatternFlash();
-    dbg_str("wrote patternFlash");
+    userDataSave();
+    dbg_str("wrote userFlash");
   }
 
   // usbState: '5' is CONFIGURED, '3' is DEFAULT.  See em_usb.h
@@ -588,7 +622,7 @@ static void updateMisc()
   CAPSENSE_Sense();
 
   if( CAPSENSE_getPressed(BUTTON0_CHANNEL) ) {
-    playing = 3 ; // sigh
+    playing = PLAY_DIRECTLED ; // sigh
     setLED( 0, 255, 0, 2 );
     
   }
@@ -683,25 +717,22 @@ int main()
 
   setupLeuart();
 
-  dbg_str("\nblink1mk3-test4 startup...\n");
+  dbg_str("\nblink1mk3-test5 startup...\n");
   dbg_printf("toboot_runtime: count:%d model:%x\n",
              toboot_runtime.boot_count, toboot_runtime.board_model);
   toboot_runtime.boot_count = 0; // reset boot count to say we're alive
   // FIXME: how is the toboot_runtime RAM being preserved on power cycle?
 
   ws2812_setupSpi();
-  
-  // Load pattern from flash to RAM
-  memset( pattern, 0, sizeof(patternline_t)*PATT_MAX_RAM); // zero out just in case
-  memcpy( pattern, patternFlash, sizeof(patternline_t)*PATT_MAX_FLASH);
 
-#if 0
-  // debug
-  for( int i=0; i<PATT_MAX_FLASH; i++) {
-    ctmp = pattern[i].color;
-    ttmp = pattern[i].dmillis;
-    ledn = pattern[i].ledn;
-    dbg_printf("pattern[%d] rgb:%2x%2x%2x t:%d l:%d\n",
+  userDataLoad();
+#if 1
+  // debug: dump out loaded pattern
+  for( int i=0; i<PATT_MAX; i++) {
+    ctmp = userData.pattern[i].color;
+    ttmp = userData.pattern[i].dmillis;
+    ledn = userData.pattern[i].ledn;
+    dbg_printf("patt[%d] rgb:%2x%2x%2x t:%d l:%d\n",
                i, ctmp.r, ctmp.g, ctmp.b, ttmp, ledn);
   }
 #endif
@@ -815,7 +846,7 @@ static void handleMessage(uint8_t reportId)
   if(      cmd == 'c' ) {
     uint16_t dmillis = (inbuf[5] << 8) | inbuf[6];
     uint8_t ledn = inbuf[7];          // which LED to address
-    playing = 0;
+    playing = PLAY_OFF;
     rgb_setDest(&c, dmillis, ledn);
   }
   //
@@ -823,9 +854,9 @@ static void handleMessage(uint8_t reportId)
   //
   else if( cmd == 'n' ) {
     uint8_t iledn = inbuf[7];          // which LED to address
-    playing = 0;
+    playing = PLAY_OFF;
     if( iledn > 0 ) {
-      playing = 3;                   // FIXME: wtf non-semantic 3
+      playing = PLAY_DIRECTLED;       // FIXME: wtf non-semantic 3
       setLED( c.r, c.g, c.b, iledn ); // FIXME: no fading
     }
     else {
@@ -854,8 +885,8 @@ static void handleMessage(uint8_t reportId)
     playstart = inbuf[3];
     playend   = inbuf[4];
     playcount = inbuf[5];
-    if( playend == 0 || playend > PATT_MAX_RAM )
-      playend = PATT_MAX_RAM;
+    if( playend == 0 || playend > PATT_MAX )
+      playend = PATT_MAX;
     else playend++;  // so that it's equivalent to PATT_MAX, if you know what i mean
     startPlaying();
   }
@@ -882,17 +913,17 @@ static void handleMessage(uint8_t reportId)
     ptmp.dmillis = ((uint16_t)inbuf[5] << 8) | inbuf[6];
     ptmp.ledn    = ledn;
     uint8_t pos  = inbuf[7];
-    if( pos >= PATT_MAX_RAM ) pos = 0;  // just in case
+    if( pos >= PATT_MAX ) pos = 0;  // just in case
     // save pattern line to RAM
-    memcpy( &pattern[pos], &ptmp, sizeof(patternline_t) );
+    memcpy( &userData.pattern[pos], &ptmp, sizeof(patternline_t) );
   }
   //
   // Read color pattern entry - {1,'R', 0,0,0, 0,0, pos}
   //
   else if( cmd == 'R' ) {
     uint8_t pos = inbuf[7];
-    if( pos >= PATT_MAX_RAM ) pos = 0;
-    patternline_t patt = pattern[pos];
+    if( pos >= PATT_MAX ) pos = 0;
+    patternline_t patt = userData.pattern[pos];
     reportToSend[2] = patt.color.r;
     reportToSend[3] = patt.color.g;
     reportToSend[4] = patt.color.b;
@@ -932,8 +963,8 @@ static void handleMessage(uint8_t reportId)
     uint8_t stop = inbuf[5];
     playstart  = inbuf[6];
     playend    = inbuf[7];
-    if( playend == 0 || playend > PATT_MAX_RAM )
-      playend = PATT_MAX_RAM;
+    if( playend == 0 || playend > PATT_MAX )
+      playend = PATT_MAX;
     
     if( serverdown_on ) {
       serverdown_millis = t;
@@ -945,6 +976,34 @@ static void handleMessage(uint8_t reportId)
       off();
     }
   }
+
+  // Set startup parameters     format: {1, 'B', bootmode, playstart, playend, playcount, 0,0} 
+  //
+  else if( cmd == 'B' ) { 
+    userData.startup_params.bootmode  = inbuf[2]; // ledn
+    userData.startup_params.playstart = inbuf[3]; // r
+    userData.startup_params.playend   = inbuf[4]; // g
+    userData.startup_params.playcount = inbuf[5]; // b
+    userData.startup_params.unused1   = inbuf[6]; // th
+    userData.startup_params.unused2   = inbuf[7]; // tl
+
+    // fixup playend, copied from 'p'lay/pause
+    // FIXME: find a real way to handle this 
+    if( userData.startup_params.playend == 0 || userData.startup_params.playend > PATT_MAX )
+      userData.startup_params.playend = PATT_MAX;
+    else userData.startup_params.playend++;  // so it's equiv to patt_max, if you know what i mean
+    
+  }
+
+  // Get Startup Params      format: { 1, 'b', 0,0,0,0, 0,0 }
+  //
+  else if( cmd == 'b' ) {
+    reportToSend[2] = userData.startup_params.bootmode;
+    reportToSend[3] = userData.startup_params.playstart;
+    reportToSend[4] = userData.startup_params.playend;
+    reportToSend[5] = userData.startup_params.playcount;
+  }
+  
   //
   //  Get version               format: { 1, 'v', 0,0,0,        0,0, 0 }
   //

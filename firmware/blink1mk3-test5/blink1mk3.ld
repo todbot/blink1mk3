@@ -12,10 +12,10 @@
 MEMORY
 {
   /*  FLASH (rx) : ORIGIN = 0x00004000, LENGTH = 64k - 16k /* Flash: 16k reserved for tomubootloader */
-  FLASH (rx) : ORIGIN = 0x00004000, LENGTH = 64k - 16k - (2*1k) /* Flash: 16k reserved for tomubootloader */
-  NOTES (r)  : ORIGIN = 0x0000f800, LENGTH = 1k /* flash region for user notes */
-  PATTS (r)  : ORIGIN = 0x0000fc00, LENGTH = 1k /* flash region for color patterns */
-  RAM (rwx)  : ORIGIN = 0x20000000 + 8, LENGTH = 0x2000 - 8  /* RAM: 8k - 8 tomu bytes*/
+  FLASH (rx)  : ORIGIN = 0x00004000, LENGTH = 64k - 16k - (2*1k) /* Flash: 16k reserved for tomubootloader */
+  NOTES (r)   : ORIGIN = 0x0000f800, LENGTH = 1k /* flash region for user notes */
+  USERDAT (r) : ORIGIN = 0x0000fc00, LENGTH = 1k /* flash region for startup params & color patterns */
+  RAM (rwx)   : ORIGIN = 0x20000000 + 8, LENGTH = 0x2000 - 8  /* RAM: 8k - 8 tomu bytes*/
 }
 
 /* Linker script to place sections and symbol values. Should be used together
@@ -54,9 +54,9 @@ ENTRY(Reset_Handler)
 
 SECTIONS
 {
-  .patternFlashSection : {
-      *(.patternFlashSection)
-  } > PATTS
+  .userFlashSection : {
+      *(.userFlashSection)
+  } > USERDAT
   .userNotesFlashSection : {
       *(.userNotesFlashSection)
   } > NOTES
