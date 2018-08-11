@@ -31,6 +31,8 @@ This directory is basically a fork of the
 
 ## Flashing:
 
+[outdated]
+
 Once you've compiled the code, you can flash the device using `minicom` on linux
 and OSX, or some other serial I/O utility on Windows. To do that, set it up with
 `115200 8n1`, then use `i` to show the bootloader version.
@@ -41,3 +43,14 @@ compilation, and wait until it's uploaded.
 
 Once that's done, press `b` to boot into the firmware. The bootloader will hang
 for 5-7 seconds, then the device will boot.
+
+
+## Testing:
+
+In Windows, install the app "TDD.exe"
+(https://www.thesycon.de/eng/usb_descriptordumper.shtml)
+It is very good at detecting subtle errors in USB configuration that MacOS & Linux
+point out.
+
+On Mac OS X, install "USB Prober"
+
