@@ -67,9 +67,10 @@
 #define blink1_version_major '3'
 #define blink1_version_minor '1'
 
-#define DEBUG 1    // enable debug messages output via LEUART
+#define DEBUG 1    // enable debug messages output via LEUART, see 'debug.h'
+#define DEBUG_STARTUP 1
 // define this to print out cmd+args in handleMessage()
-//#define DEBUG_HANDLEMESSAGE
+#define DEBUG_HANDLEMESSAGE 0
 
 #define BOARD_TYPE BOARD_TYPE_BLINK1MK3       // ws2812 data out on B7
 //#define BOARD_TYPE BOARD_TYPE_TOMU          // ws2812 data out on E13
@@ -223,9 +224,10 @@ const userdata_t userFlash = {
 // can at most be FLASH_PAGE_SIZE big (1024 bytes)
 __attribute__ ((section(".userNotesFlashSection")))
 const usernote_t userNotesFlash[NOTE_COUNT] = {
-  {"this is a test note"},
-  {"here is another test note"},
-  {"This is a max size note. Note length is 50 bytes.!"}
+  {"Note0: This is a test note"},
+  {"Note1: Here is another test note"},
+  {"Note2: This is a max size note. Note is 50 bytes.!"},
+  {"Note3:67890123456789012345678901234567890123456789"},
   //01234567890123456789012345678901234567890123456789
   //          1         2         3         4
 };
@@ -279,12 +281,14 @@ uint32_t serverdown_update_next;
 
 uint32_t last_misc_millis;
 
-// set by 'G' "gobootload" command
+// Set by 'G' "gobootload" command
 bool shouldRebootToBootloader = false;
+// Set when a Note write is issued
 bool doNotesWrite = false;
+// Set when USB is properly setup by host PC
 bool usbHasBeenSetup = false;
 
-// for sending back HID Descriptor in setupCmd
+// For sending back HID Descriptor in setupCmd
 static void  *hidDescriptor = NULL;
 
 // The USB report packet received from the host
@@ -726,7 +730,8 @@ int main()
   ws2812_setupSpi();
 
   userDataLoad();
-#if 1
+
+#if DEBUG_STARTUP
   // debug: dump out loaded pattern
   for( int i=0; i<PATT_MAX; i++) {
     ctmp = userData.pattern[i].color;
@@ -748,6 +753,7 @@ int main()
   // because TIMER0 & TIMER1 are already taken by the capacitive touch sensors.
   //
   int rc = USBD_Init(&initstruct);
+  UNUSED(rc);
   dbg_printf("usbd_init rc:%d\n", rc);
 
   // When using a debugger it is practical to uncomment the following three
@@ -806,23 +812,24 @@ int main()
  *    - Write EEPROM location   format: { 1, 'E', ad,v,0,      0,0, 0 } (1)
  *    - Get version             format: { 1, 'v', 0,0,0,       0,0, 0 }
  *    - Test command            format: { 1, '!', 0,0,0,       0,0, 0 }
- *    - Write 50-byte note      format: { 1, 'F', noteid, data0 ... data99 } (3)
- *    - Read  50-byte note      format: { 1, 'f', noteid, data0 ... data99 } (3)
+ *    - Write 50-byte note      format: { 2, 'F', noteid, data0 ... data99 } (3)
+ *    - Read  50-byte note      format: { 2, 'f', noteid, data0 ... data99 } (3)
  *    - Go to bootloader        format: { 1, 'G', 'o','B','o','o','t',0 } (3)
+ *    - Set startup params      format: { 1, 'B', bootmode, playstart,playend,playcnt,0,0} (3)      
+ *    - Get startup params      format: { 1, 'b', 0,0,0, 0,0,0        } (3)
+ *    - Server mode tickle      format: { 1, 'D', {1/0},th,tl, {1,0},sp, ep }
  *
- *  Fade to RGB color        format: { 1, 'c', r,g,b,      th,tl, ledn }
- *  Set RGB color now        format: { 1, 'n', r,g,b,        0,0, ledn }
- *  Play/Pause, with pos     format: { 1, 'p', {1/0},pos,0,  0,0,    0 }
- *  Play/Pause, with pos     format: { 1, 'p', {1/0},pos,endpos, 0,0,0 }
- *  Write color pattern line format: { 1, 'P', r,g,b,      th,tl,  pos }
- *  Read color pattern line  format: { 1, 'R', 0,0,0,        0,0, pos }
- *  Server mode tickle       format: { 1, 'D', {1/0},th,tl, {1,0},sp, ep }
- *  Get version              format: { 1, 'v', 0,0,0,        0,0, 0 }
+ * x Fade to RGB color        format: { 1, 'c', r,g,b,      th,tl, ledn }
+ * x Set RGB color now        format: { 1, 'n', r,g,b,        0,0, ledn }
+ * x Play/Pause, with pos     format: { 1, 'p', {1/0},pos,0,  0,0,    0 }
+ * x Play/Pause, with pos     format: { 1, 'p', {1/0},pos,endpos, 0,0,0 }
+ * x Write color pattern line format: { 1, 'P', r,g,b,      th,tl,  pos }
+ * x Read color pattern line  format: { 1, 'R', 0,0,0,        0,0, pos }
  *
  *********************************************************************/
 static void handleMessage(uint8_t reportId)
 {
-#ifdef DEBUG_HANDLEMESSAGE
+#if DEBUG_HANDLEMESSAGE 
   dbg_printf("%d:%x,%x,%x,%x,%x,%x,%x,%x\n", reportId,
           inbuf[0],inbuf[1],inbuf[2],inbuf[3],inbuf[4],inbuf[5],inbuf[6],inbuf[7] );
 #endif
@@ -953,7 +960,7 @@ static void handleMessage(uint8_t reportId)
   //  Server mode tickle        format: { 1, 'D', {1/0}, th,tl, st, sp, ep }
   //     1/0 == on/off
   //     t == tickle time
-  //     st == stop any current playing pattern and turn off
+  //     st == stop any current playing pattern and turn off (boolean)
   //     sp == pattern play start point
   //     ep == pattern play end point
   //
@@ -1233,7 +1240,12 @@ int setupCmd(const USB_Setup_TypeDef *setup)
   return retVal;
 }
 
-// unused for now
+/******************************************************************************
+ * Used to detect USB state change
+ *
+ * Sets global variable "usbHasBeenSetup"
+ *
+ *****************************************************************************/
 void stateChange(USBD_State_TypeDef oldState, USBD_State_TypeDef newState)
 {
   (void)oldState;
