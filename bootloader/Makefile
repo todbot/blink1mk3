@@ -46,6 +46,7 @@ program-openocd:
 
 program-jlink:
 	echo "loadbin toboot-blink1.bin,0 \nr \nexit\n" > jlink-tmp.txt
+	#echo "power on; st; loadbin toboot-blink1.bin,0 \npower off\nst \nr \nexit\n" > jlink-tmp.txt
 	jlinkexe -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
 	rm jlink-tmp.txt
 
