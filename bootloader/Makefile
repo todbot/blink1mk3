@@ -45,10 +45,13 @@ program-openocd:
 	openocd -f ../firmware/openocd.cfg -c 'program toboot-blink1.bin verify reset exit'
 
 program-jlink:
-	echo "loadbin toboot-blink1.bin,0 \nr \nexit\n" > jlink-tmp.txt
-	#echo "power on; st; loadbin toboot-blink1.bin,0 \npower off\nst \nr \nexit\n" > jlink-tmp.txt
+#	echo "loadbin toboot-blink1.bin,0 \n r \nexit\n" > jlink-tmp.txt
+	echo "power on \n st \n loadbin toboot-blink1.bin,0 \n st \nr \n power off \n st \n exit\n" > jlink-tmp.txt
 	jlinkexe -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
 	rm jlink-tmp.txt
+
+jlink: program-jlink
+openocd: program-openocd
 
 size:
 	arm-none-eabi-size ./tomu-bootloader/toboot/toboot-blink1.elf

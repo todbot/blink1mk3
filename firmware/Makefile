@@ -20,7 +20,7 @@ LSCRIPT = tomu.ld
 LSCRIPT2 = tomu-nobootloader.ld
 GECKO_SDK_REV = v5.0.0
 
-TARGET = blink1mk3-test4
+TARGET = blink1mk3-test5
 
 ################################################################################
 #

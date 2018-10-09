@@ -505,16 +505,45 @@ static void updateLEDs(void)
 
         rgb_updateCurrent();  // playing=3 => direct LED addressing (not anymore)
         displayLEDs();
+
 #if 1
+        // normal pre v206 behavior
+        if( userData.startup_params.bootmode == BOOT_NORMAL ) { 
+            // check for non-computer power up
+            if( !usbHasBeenSetup ) {
+                if( !playing && now > 500 ) {  // 500 msec wait
+                    playing = PLAY_POWERUP;
+                    startPlaying();
+                }
+            }
+            else {  // else usb is setup...
+                if( playing == PLAY_POWERUP ) { // ...but we started a powerup play, so reset
+                    off();
+                }
+            }
+        }
+        else { 
+            if( userData.startup_params.bootmode == BOOT_PLAY) { 
+                if( !playing && now > 500 && now < 1000 ) { // 500 msec wait
+                    playing = PLAY_ON;
+                    startPlaying();
+                }
+            }
+            // else do nothing
+        }
+
+#endif
+
+#if 0
         // check for non-computer power up
         if( !usbHasBeenSetup ) {
             if( !playing && now > 500 ) {  // 500 msec wait
-                playing = 2;
+                playing = PLAY_POWERUP;
                 startPlaying();
             }
         }
         else {  // else usb is setup...
-            if( playing == 2 ) { // ...but we started a powerup play, so reset
+            if( playing == PLAY_POWERUP ) { // ...but we started a powerup play, so reset
                 off();
             }
         }
@@ -998,8 +1027,8 @@ static void handleMessage(uint8_t reportId)
     // FIXME: find a real way to handle this 
     if( userData.startup_params.playend == 0 || userData.startup_params.playend > PATT_MAX )
       userData.startup_params.playend = PATT_MAX;
-    else userData.startup_params.playend++;  // so it's equiv to patt_max, if you know what i mean
-    
+    else
+      userData.startup_params.playend++; // so it's equiv to patt_max, if you know what i mean
   }
 
   // Get Startup Params      format: { 1, 'b', 0,0,0,0, 0,0 }
@@ -1009,6 +1038,8 @@ static void handleMessage(uint8_t reportId)
     reportToSend[3] = userData.startup_params.playstart;
     reportToSend[4] = userData.startup_params.playend;
     reportToSend[5] = userData.startup_params.playcount;
+    reportToSend[6] = userData.startup_params.unused1;
+    reportToSend[7] = userData.startup_params.unused2;
   }
   
   //

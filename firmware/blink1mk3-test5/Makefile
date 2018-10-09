@@ -141,7 +141,8 @@ $(TARGET).bin: $(TARGET).elf
 #
 jlink: program-jlink
 program-jlink:
-	echo "loadbin $(TARGET).bin,0x4000 \ngo\nexit\n" > jlink-tmp.txt
+#	echo "loadbin $(TARGET).bin,0x4000 \ngo\nexit\n" > jlink-tmp.txt
+	echo "power on \n loadbin $(TARGET).bin,0x4000 \ngo\nexit\n" > jlink-tmp.txt
 	jlinkexe -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
 	rm jlink-tmp.txt
 
