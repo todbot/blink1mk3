@@ -140,9 +140,10 @@ $(TARGET).bin: $(TARGET).elf
 # Programming targets
 #
 jlink: program-jlink
+
 program-jlink:
 #	echo "loadbin $(TARGET).bin,0x4000 \ngo\nexit\n" > jlink-tmp.txt
-	echo "power on \n loadbin $(TARGET).bin,0x4000 \ngo\nexit\n" > jlink-tmp.txt
+	echo "power on \n loadbin $(TARGET).bin,0x4000 \ngo\npower off\nexit\n" > jlink-tmp.txt
 	jlinkexe -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
 	rm jlink-tmp.txt
 
@@ -150,7 +151,7 @@ program-openocd:
 	openocd -f ../openocd.cfg -c "program $(TARGET).bin verify reset exit 0x4000"
 
 # uses ThingM blink(1) DFU VID:PID
-# the '-' means "continue even if it fails"
+# the '-' before a command means "continue even if it fails"
 dfu: program-dfu
 program-dfu:
 	-blink1-tool --gobootload && sleep 1.0
