@@ -15,7 +15,7 @@ CFLAGS = $(IFLAGS) \
 				 -g 
 
 
-LSCRIPT = ../tomu.ld
+LSCRIPT = ../blink1mk3-prod.ld
 
 LFLAGS = -mcpu=cortex-m0plus \
 				 -mthumb \
