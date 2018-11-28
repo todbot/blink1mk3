@@ -16,11 +16,9 @@
 #
 # Gecko
 #
-LSCRIPT = tomu.ld
-LSCRIPT2 = tomu-nobootloader.ld
 GECKO_SDK_REV = v5.0.0
 
-TARGET = blink1mk3-test5
+TARGET = blink1mk3
 
 ################################################################################
 #
@@ -45,19 +43,19 @@ clean:
 dist-clean:
 	make clean || true
 	rm -rf Gecko_SDK
-	rm -f $(LSCRIPT)
-	rm -f $(LSCRIPT2)
+#	rm -f $(LSCRIPT)
+#	rm -f $(LSCRIPT2)
 
 deps:
 	@if [ ! -d Gecko_SDK ]; then \
 		git clone --depth 1 https://github.com/SiliconLabs/Gecko_SDK --branch ${GECKO_SDK_REV}; \
 	fi
-	@if [ ! -f "${LSCRIPT}" ]; then \
-		echo "Patching linker file to ${LSCRIPT}"; \
-		patch -o ${LSCRIPT} Gecko_SDK/platform/Device/SiliconLabs/EFM32HG/Source/GCC/efm32hg.ld linker.patch; \
-	fi
-	@if [ ! -f "${LSCRIPT2}" ]; then \
-		echo "Patching linker_nobootload file to ${LSCRIPT2}"; \
-		patch -o ${LSCRIPT2} Gecko_SDK/platform/Device/SiliconLabs/EFM32HG/Source/GCC/efm32hg.ld linker_nobootloader.patch; \
-	fi
+#	@if [ ! -f "${LSCRIPT}" ]; then \
+#		echo "Patching linker file to ${LSCRIPT}"; \
+#		patch -o ${LSCRIPT} Gecko_SDK/platform/Device/SiliconLabs/EFM32HG/Source/GCC/efm32hg.ld linker.patch; \
+#	fi
+#	@if [ ! -f "${LSCRIPT2}" ]; then \
+#		echo "Patching linker_nobootload file to ${LSCRIPT2}"; \
+#		patch -o ${LSCRIPT2} Gecko_SDK/platform/Device/SiliconLabs/EFM32HG/Source/GCC/efm32hg.ld linker_nobootloader.patch; \
+#	fi
 
