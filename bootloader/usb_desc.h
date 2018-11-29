@@ -85,7 +85,7 @@ extern const usb_descriptor_list_t usb_descriptor_list[];
 #define WEBUSB_VENDOR_CODE 2
 
 #ifndef LANDING_PAGE_URL
-#define LANDING_PAGE_URL "dfu.tomu.im"
+#define LANDING_PAGE_URL "dfu.blink1.thingm.com"
 #endif
 
 #define LANDING_PAGE_DESCRIPTOR_SIZE (WEBUSB_DT_URL_DESCRIPTOR_SIZE \
