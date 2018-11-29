@@ -61,7 +61,8 @@ struct usb_string_descriptor_struct {
 #define DEVICE_VER                0x0101    // Bootloader version
 #define MANUFACTURER_NAME         u"ThingM"
 #define MANUFACTURER_NAME_LEN     sizeof(MANUFACTURER_NAME)
-#define PRODUCT_NAME              u"blink(1) mk3 bootloader (0)" GIT_VERSION
+//                                  01234567890123456789012
+#define PRODUCT_NAME              u"blink1mk3 bootloader (0)" //  GIT_VERSION
 #define PRODUCT_NAME_LEN          sizeof(PRODUCT_NAME)
 #define EP0_SIZE                  64
 #define NUM_INTERFACE             1
