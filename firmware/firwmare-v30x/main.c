@@ -66,7 +66,6 @@
 #include <stdlib.h> // rand()
 #include <stdbool.h>
 
-
 #define blink1_version_major '3'
 #define blink1_version_minor '1'
 
@@ -81,6 +80,7 @@
 
 #define nLEDs 18   // number of LEDS
 
+#include "utils.h"
 #include "leuart.h"
 #include "debug.h"
 
@@ -614,12 +614,45 @@ static void updateLEDs(void)
     
 }
 
+#define SWD_PORT  gpioPortF
+#define SWDIO_PIN 1
+#define SWCLK_PIN 0
+uint8_t bootloadPinTest = 0;
+
+/**
+ * Check SWDAT & SWCLK pins for shorting
+ *  to boot to bootloader
+ * FIXME: does this all need to be in an atomic block?
+ */
+static void checkSWDPins()
+{
+  // SWCLK is output, SWDIO is input
+  GPIO_DbgSWDIOEnable(false);  // turn OFF SWD (GPIO->ROUTE = 0)
+  // begin: do this part as fast as possible
+  GPIO_PinModeSet(SWD_PORT, SWCLK_PIN, gpioModePushPull, 0);
+  GPIO_PinModeSet(SWD_PORT, SWDIO_PIN, gpioModeInputPull, 1); // pull-up
+  GPIO_PinOutClear(SWD_PORT, SWCLK_PIN); // set SWCLK low
+  int v = GPIO_PinInGet(SWD_PORT, SWDIO_PIN); // read SWDIO
+  // end: do this part as fast as possible
+  GPIO_DbgSWDIOEnable(true);   // turn ON SWD  (GPIO->ROUTE = 0)
+  
+  if( v==0 ) { // pin connected
+    bootloadPinTest += 5;
+    if( bootloadPinTest > 10 ) {
+      rebootToBootloader();
+    }
+  }
+  bootloadPinTest = constrain(bootloadPinTest, 1, 200);  // limit the value between 1-200
+  bootloadPinTest--; // decay away
+  //dbg_printf("swdt:%d %d\n", bootloadPinTest,v);
+}
+
 /**********************************************************************
  * Tend to various housekeeping
  **********************************************************************/
 static void updateMisc()
 {
-  if( (uptime_millis - last_misc_millis) > 500 ) {  // only run this every 500 msecs
+  if( (uptime_millis - last_misc_millis) > 250 ) {  // only run this every 250 msecs
     last_misc_millis = millis(); //uptime_millis;
     //write_char('.');  //write_char('0'+usbState);
     // print out heartbeats that are also our USB state:
@@ -632,7 +665,8 @@ static void updateMisc()
     if( shouldRebootToBootloader ) {
       rebootToBootloader();  // and now we die
     }
-   
+
+    checkSWDPins();
   }
   
   if( doNotesWrite ) {
@@ -849,7 +883,7 @@ int main()
  *    - Write 50-byte note      format: { 2, 'F', noteid, data0 ... data99 } (3)
  *    - Read  50-byte note      format: { 2, 'f', noteid, data0 ... data99 } (3)
  *    - Go to bootloader        format: { 1, 'G', 'o','B','o','o','t',0 } (3)
- *    - lock bootloading        format: { 2','L'  'o','c','k','B','o','o','t','l','o','a','d'} (3)
+ *    - Lock go to bootload     format: { 2','L'  'o','c','k','B','o','o','t','l','o','a','d'} (3)
  *    - Set startup params      format: { 1, 'B', bootmode, playstart,playend,playcnt,0,0} (3)
  *    - Get startup params      format: { 1, 'b', 0,0,0, 0,0,0        } (3)
  *    - Server mode tickle      format: { 1, 'D', {1/0},th,tl, {1,0},sp, ep }
