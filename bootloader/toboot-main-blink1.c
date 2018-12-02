@@ -6,8 +6,10 @@
 
 // this bootloader is for blink(1) devices
 // main differences:
+// - can only enter bootload via explicit means (pin short or main app command)
 // - "button press" is by shorting PF1 & PF0 (SWDIO & SWDCLK)
 // - no red/green LEDs
+// - WS2812 LEDs on PB7  (uses USART0)
 #define BOARD_TYPE_BLINK1
 // otherwise it's a Tomu board
 
@@ -22,7 +24,7 @@
 #include "mcu_too.h"
 #include "ws2812_spi.h"
 rgb_t leds[3] = { {99,0,33}, {33,0,99}, {99,0,33} };
-volatile bool ltoggle = false;
+volatile bool ltoggle = false;  // FIXME: do this without another variable?
 #endif
 
 static uint32_t *app_vectors;
@@ -34,14 +36,13 @@ void RTC_Handler(void)
     // Clear interrupt flag
     RTC->IFC = RTC_IFC_COMP1 | RTC_IFC_COMP0 | RTC_IFC_OF;
 
-    // FIXME: eventually do ws2812 leds
 #ifdef BOARD_TYPE_BLINK1
 
     // Toggle the green LED
     GPIO->P[0].DOUTTGL = (1 << 0);
 
-    // Also toggle the red LED, to make a pattern of flashing lights.
-    // TEST GPIO->P[1].DOUTTGL = (1 << 7);
+    // // Also toggle the red LED, to make a pattern of flashing lights.
+    // GPIO->P[1].DOUTTGL = (1 << 7);
     ws2812_sendLEDs( (ltoggle) ? leds : leds+1, 2);
     ltoggle = !ltoggle;
 

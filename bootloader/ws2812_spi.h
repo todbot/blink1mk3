@@ -1,56 +1,14 @@
 #ifndef WS2812_SPI_H
 #define WS2812_SPI_H
 
+// what makes up the data sent to one LED
 typedef struct {
     uint8_t r;
     uint8_t g;
     uint8_t b;
 } rgb_t;
+// (main code creates an "leds" array of rgb_t)
 
-/* 
-     // from blink1 ws2812_spi.h
-
-  USART_InitSync_TypeDef usartInit = USART_INITSYNC_DEFAULT;  
-  
-  // Initialize SPI 
-  usartInit.databits = usartDatabits12;
-  //usartInit.baudrate = 2400000; // 2.4MHz
-  usartInit.baudrate = 3000000;  // 3.0 MHz for SK6812mini (works for WS2812 too apparently)
-  usartInit.msbf = true;
-
-  USART_InitSync(USART0, &usartInit);
-  
-  // Enable SPI transmit and receive 
-  USART_Enable(USART0, usartEnable);
-
-  init.enable = 0;
-  init.refFreq = 0;
-  init.baudrate = 3000000;
-  init.databits = usartDatabits12;
-  init.master = true ;
-  init.msbf = true;
-  init.clockMode = usartClockMode0;
-  init.autoTx = false;
-*/
-
-typedef enum
-{
-  usartDisable  = 0x0,   /** Disable both receiver and transmitter. */
-  usartEnableRx = USART_CMD_RXEN,  /** Enable receiver only, transmitter disabled. */
-  usartEnableTx = USART_CMD_TXEN,  /** Enable transmitter only, receiver disabled. */
-  usartEnable   = (USART_CMD_RXEN | USART_CMD_TXEN) /** Enable both receiver and transmitter. */
-} USART_Enable_TypeDef;
-
-void USART_Enable(USART_TypeDef *usart, USART_Enable_TypeDef enable)
-{
-  uint32_t tmp;
-  /* Disable as specified */
-  tmp        = ~((uint32_t) (enable));
-  tmp       &= _USART_CMD_RXEN_MASK | _USART_CMD_TXEN_MASK;
-  usart->CMD = tmp << 1;
-  /* Enable as specified */
-  usart->CMD = (uint32_t) (enable);
-}
 
 /**
  *
@@ -70,6 +28,7 @@ void ws2812_setup()
   USART0->IFC       = _USART_IFC_MASK;
   USART0->ROUTE     = _USART_ROUTE_RESETVALUE;
 
+  // set master mode
   USART0->CMD = USART_CMD_MASTEREN;
   
   // set sync mode and MostSigBitFirst
@@ -85,7 +44,8 @@ void ws2812_setup()
     USART_FRAME_PARITY_DEFAULT;
 
   // set data rate (clkval)
-  // clkdiv  = 2 * refFreq;
+  // usartInit.baudrate = 3000000;  // 3.0 MHz for SK6812mini (works for WS2812 too apparently)
+  // clkdiv  = 2 * refFreq; // refFreq = 21000000
   // clkdiv += baudrate - 1;
   // clkdiv /= baudrate;
   // clkdiv -= 4;
@@ -96,21 +56,17 @@ void ws2812_setup()
   // clkdiv += 0xc0;
   // clkdiv &= 0xffffff00;
   // 
-  USART0->CLKDIV = 768;
+  USART0->CLKDIV = 768;  // trust me on this
   
-  // enable it
-  //USART0->CMD = USART_CMD_MASTEREN | USART_CMD_TXEN;
-  USART_Enable( USART0, usartEnable);
+  // enable master and transmitter (no receiver tho)
+  USART0->CMD = USART_CMD_MASTEREN | USART_CMD_TXEN;
 
+  // from blink1 codebase
   // #define USART0_LOCATION USART_ROUTE_LOCATION_LOC4
   // #define USART0_TXPORT   gpioPortB
   // #define USART0_TXPIN    7
 
-  //GPIO_PinModeSet(USART0_TXPORT, USART0_TXPIN, gpioModePushPull, 0); // MOSI 
-  //  Mux PF0 (output) SWDCLK
-  //  GPIO->P[5].MODEL &= ~_GPIO_P_MODEL_MODE0_MASK;
-  //  GPIO->P[5].MODEL |= GPIO_P_MODEL_MODE0_PUSHPULL;
-  
+  // Set PB7 to be output (pin that blink(1) LEDs are on)
   GPIO->P[1].MODEL &= ~_GPIO_P_MODEL_MODE7_MASK;
   GPIO->P[1].MODEL |=   GPIO_P_MODEL_MODE7_PUSHPULL;
   // Route USART clock and USART TX to LOC0 (see defines above)
