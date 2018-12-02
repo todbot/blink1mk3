@@ -4,9 +4,6 @@
 #include "mcu.h"
 #include "usb_desc.h"
 
-#include "mcu_too.h"
-#include "ws2812_spi.h"
-
 // this bootloader is for blink(1) devices
 // main differences:
 // - "button press" is by shorting PF1 & PF0 (SWDIO & SWDCLK)
@@ -19,6 +16,14 @@
 
 #define RTC_INTERVAL_MSEC 250
 
+
+
+#ifdef BOARD_TYPE_BLINK1
+#include "mcu_too.h"
+#include "ws2812_spi.h"
+rgb_t leds[3] = { {99,0,33}, {33,0,99}, {99,0,33} };
+volatile bool ltoggle = false;
+#endif
 
 static uint32_t *app_vectors;
 enum bootloader_reason bootloader_reason;
@@ -37,6 +42,8 @@ void RTC_Handler(void)
 
     // Also toggle the red LED, to make a pattern of flashing lights.
     // TEST GPIO->P[1].DOUTTGL = (1 << 7);
+    ws2812_sendLEDs( (ltoggle) ? leds : leds+1, 2);
+    ltoggle = !ltoggle;
 
 #else
     // Toggle the green LED
@@ -109,6 +116,10 @@ void __early_init(void)
         ;
 
 #ifdef BOARD_TYPE_BLINK1
+
+    ws2812_setup();
+    //ws2812_sendLEDs( leds, 3);
+
     // FIXME: change this to be set up ws2812 LEDs
     GPIO->P[0].MODEL &= ~_GPIO_P_MODEL_MODE0_MASK;
     GPIO->P[0].MODEL |= GPIO_P_MODEL_MODE0_WIREDAND;
@@ -438,11 +449,7 @@ __attribute__((noreturn)) void bootloader_main(void)
 {
     const struct toboot_configuration *cfg = tb_get_config();
     app_vectors = (uint32_t *)(1024 * cfg->start);
-#if 1
-    ws2812_setup();
-    rgb_t leds[3] = { {99,0,0}, {0,99,0}, {0,0,99} };
-    ws2812_sendLEDs( leds, 3);
-#endif
+
     
     if (should_enter_bootloader(cfg))
     {

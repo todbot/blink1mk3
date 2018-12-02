@@ -2,8 +2,8 @@
 #define WS2812_SPI_H
 
 typedef struct {
-    uint8_t g;
     uint8_t r;
+    uint8_t g;
     uint8_t b;
 } rgb_t;
 
@@ -147,11 +147,11 @@ static const uint16_t bits[] =
 
 
 // note double-wide with TxDouble, sending 12-bit words
-// USART_TxDouble( USART0, x)
+// equivalent to USART_TxDouble( USART0, x)
 static inline void ws2812_spiSend(uint32_t data) {
   // Check that transmit buffer is empty
-  while (!(USART0->STATUS & USART_STATUS_TXBL)) {
-  }
+  while (!(USART0->STATUS & USART_STATUS_TXBL))
+    ;
   USART0->TXDOUBLE = (uint32_t)data;
 }
 
@@ -165,7 +165,7 @@ static inline void ws2812_sendByte (int value)
 /**********************************************************************
  * @brief Send LED data out via SPI, disables interrupts
  **********************************************************************/
-static void ws2812_sendLEDs(rgb_t* leds, int num)
+static inline void ws2812_sendLEDs(rgb_t* leds, int num)
 {
   //CORE_irqState_t is = CORE_EnterCritical();
   for( int i=0; i<num; i++ ) {
