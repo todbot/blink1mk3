@@ -361,6 +361,7 @@ static void SpinDelay(uint32_t millis) {
  **********************************************************************/
 static void rebootToBootloader()
 {
+  dbg_printf("\nbootloading...\n");
   // set magic value to force bootloader
   toboot_runtime.magic = TOBOOT_FORCE_ENTRY_MAGIC;
   setLEDsAll(0,0,0);     // Turn off all LEDs
@@ -614,6 +615,9 @@ static void updateLEDs(void)
     
 }
 
+//
+// Hardawre bootloader trigger support
+//
 #define SWD_PORT  gpioPortF
 #define SWDIO_PIN 1
 #define SWCLK_PIN 0
@@ -629,9 +633,9 @@ static void checkSWDPins()
   // SWCLK is output, SWDIO is input
   GPIO_DbgSWDIOEnable(false);  // turn OFF SWD (GPIO->ROUTE = 0)
   // begin: do this part as fast as possible
-  GPIO_PinModeSet(SWD_PORT, SWCLK_PIN, gpioModePushPull, 0);
+  GPIO_PinModeSet(SWD_PORT, SWCLK_PIN, gpioModePushPull, 0); // set LOW 
   GPIO_PinModeSet(SWD_PORT, SWDIO_PIN, gpioModeInputPull, 1); // pull-up
-  GPIO_PinOutClear(SWD_PORT, SWCLK_PIN); // set SWCLK low
+  //GPIO_PinOutClear(SWD_PORT, SWCLK_PIN); // set SWCLK low
   int v = GPIO_PinInGet(SWD_PORT, SWDIO_PIN); // read SWDIO
   // end: do this part as fast as possible
   GPIO_DbgSWDIOEnable(true);   // turn ON SWD  (GPIO->ROUTE = 0)
@@ -665,8 +669,10 @@ static void updateMisc()
     if( shouldRebootToBootloader ) {
       rebootToBootloader();  // and now we die
     }
-
-    checkSWDPins();
+    
+    if( userData.startup_params.bootloaderlock ) {
+      checkSWDPins();
+    }
   }
   
   if( doNotesWrite ) {
@@ -790,13 +796,24 @@ int main()
 
   setupLeuart();
 
-  dbg_str("\nblink1mk3-test5 startup...\n");
+  dbg_str("\nblink1mk3-firmware-v30x startup...\n");
   dbg_printf("toboot_runtime: count:%d model:%x\n",
              toboot_runtime.boot_count, toboot_runtime.board_model);
+
   toboot_runtime.boot_count = 0; // reset boot count to say we're alive
   // FIXME: how is the toboot_runtime RAM being preserved on power cycle?
 
   ws2812_setupSpi();
+
+  uint32_t refFreq = CMU_ClockFreqGet(cmuClock_HFPER);
+  dbg_printf("refFreq:%ld\n", refFreq);         // 21000000
+  dbg_printf("CTRL   :%ld\n", USART0->CTRL);    // 1025 = 0x0401
+  dbg_printf("FRAME  :%ld\n", USART0->FRAME);   // 4105 = 0x1009
+  dbg_printf("CMD    :%ld\n", USART0->CMD);     // 0
+  dbg_printf("STATUS :%ld\n", USART0->STATUS);  // 71   = 0x0047
+  dbg_printf("CLKDIV :%ld\n", USART0->CLKDIV);  // 768
+  dbg_printf("ROUTE  :%ld\n", USART0->ROUTE);
+  dbg_printf("HFPERCLKDIV: %ld\n", CMU->HFPERCLKDIV );
 
   userDataLoad();
 

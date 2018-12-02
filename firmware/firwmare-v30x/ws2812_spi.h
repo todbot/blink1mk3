@@ -69,10 +69,11 @@ static void ws2812_setupSpi(void)
   
   // Configure GPIO pins for SPI
   //GPIO_PinModeSet(USART0_CLKPORT, USART0_CLOCKPIN  gpioModePushPull, 0); // CLK // don't need clock
+  // for blink1mk3: portB pin7
   GPIO_PinModeSet(USART0_TXPORT, USART0_TXPIN, gpioModePushPull, 0); // MOSI 
  
-  // Route USART clock and USART TX to LOC0 (PortE12, PortE10)
-  USART0->ROUTE = USART0_LOCATION |
+  // Route USART clock and USART TX to LOC0 (see defines above)
+  USART0->ROUTE = USART0_LOCATION |     //  USART_ROUTE_LOCATION_LOC4 for blink1mk3
                   USART_ROUTE_TXPEN;
                   //USART_ROUTE_CLKPEN  // don't need clock pin
 }
