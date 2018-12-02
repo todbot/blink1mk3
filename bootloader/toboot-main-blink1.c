@@ -4,6 +4,9 @@
 #include "mcu.h"
 #include "usb_desc.h"
 
+#include "mcu_too.h"
+#include "ws2812_spi.h"
+
 // this bootloader is for blink(1) devices
 // main differences:
 // - "button press" is by shorting PF1 & PF0 (SWDIO & SWDCLK)
@@ -33,7 +36,7 @@ void RTC_Handler(void)
     GPIO->P[0].DOUTTGL = (1 << 0);
 
     // Also toggle the red LED, to make a pattern of flashing lights.
-    GPIO->P[1].DOUTTGL = (1 << 7);
+    // TEST GPIO->P[1].DOUTTGL = (1 << 7);
 
 #else
     // Toggle the green LED
@@ -71,12 +74,13 @@ void __early_init(void)
 {
     // Enable peripheral clocks.
     CMU->HFPERCLKDIV = CMU_HFPERCLKDIV_HFPERCLKEN;
-    CMU->HFPERCLKEN0 = CMU_HFPERCLKEN0_GPIO | BOOTLOADER_USART_CLOCKEN | AUTOBAUD_TIMER_CLOCK;
-    CMU->HFPERCLKDIV = 1 << 8;
+    CMU->HFPERCLKEN0 = CMU_HFPERCLKEN0_GPIO | BOOTLOADER_USART_CLOCKEN | AUTOBAUD_TIMER_CLOCK | CMU_HFPERCLKEN0_USART0; // CMU_HFPERCLKEN0_PRS;
+    //CMU->HFPERCLKDIV = 1 << 8;
 
     // Enable LE and DMA interfaces.
     CMU->HFCORECLKEN0 = CMU_HFCORECLKEN0_LE | CMU_HFCORECLKEN0_DMA | CMU_HFCORECLKEN0_USB | CMU_HFCORECLKEN0_USBC;
 
+    
     // Setup LFA/LFB clock sources.
     CMU->LFCLKSEL = CMU_LFCLKSEL_LFA_LFRCO | CMU_LFCLKSEL_LFB_HFCORECLKLEDIV2;
 
@@ -111,9 +115,13 @@ void __early_init(void)
     GPIO->P[0].DOUTCLR = (1 << 0);
 
     // Mux PB7 (Red LED)
-    GPIO->P[1].MODEL &= ~_GPIO_P_MODEL_MODE7_MASK;
-    GPIO->P[1].MODEL |= GPIO_P_MODEL_MODE7_WIREDAND;
-    GPIO->P[1].DOUTSET = (1 << 7);
+    //GPIO->P[1].MODEL &= ~_GPIO_P_MODEL_MODE7_MASK;
+    //GPIO->P[1].MODEL |= GPIO_P_MODEL_MODE7_WIREDAND;
+    //GPIO->P[1].DOUTSET = (1 << 7);
+    
+    // todtest GPIO->P[2].MODEL &= ~_GPIO_P_MODEL_MODE7_MASK;
+    //GPIO->P[2].MODEL |=   GPIO_P_MODEL_MODE7_PUSHPULL;
+    //GPIO->P[1].DOUTSET = (1 << 7);
 #else
     // Mux things
     // Mux PA0 (Green LED)
@@ -390,7 +398,7 @@ __attribute__((noreturn)) static void boot_app(void)
     CMU->LFACLKEN0 = _CMU_LFACLKEN0_RESETVALUE;
 
     GPIO->P[0].MODEL = _GPIO_P_MODEL_RESETVALUE;
-    GPIO->P[1].MODEL = _GPIO_P_MODEL_RESETVALUE;
+    // GPIO->P[1].MODEL = _GPIO_P_MODEL_RESETVALUE;
 
 #ifdef BOARD_TYPE_BLINK1
     GPIO->P[5].MODEL = _GPIO_P_MODEL_RESETVALUE;
@@ -430,7 +438,12 @@ __attribute__((noreturn)) void bootloader_main(void)
 {
     const struct toboot_configuration *cfg = tb_get_config();
     app_vectors = (uint32_t *)(1024 * cfg->start);
-
+#if 1
+    ws2812_setup();
+    rgb_t leds[3] = { {99,0,0}, {0,99,0}, {0,0,99} };
+    ws2812_sendLEDs( leds, 3);
+#endif
+    
     if (should_enter_bootloader(cfg))
     {
         boot_token.magic = 0;
