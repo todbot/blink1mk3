@@ -69,7 +69,7 @@
 #define blink1_version_major '3'
 #define blink1_version_minor '1'
 
-#define DEBUG 1    // enable debug messages output via LEUART, see 'debug.h'
+#define DEBUG 0    // enable debug messages output via LEUART, see 'debug.h'
 #define DEBUG_STARTUP 1
 // define this to print out cmd+args in handleMessage()
 #define DEBUG_HANDLEMESSAGE 0
@@ -810,8 +810,7 @@ int main()
 
   ws2812_setupSpi();
 
-  uint32_t refFreq = CMU_ClockFreqGet(cmuClock_HFPER);
-  dbg_printf("refFreq:%ld\n", refFreq);         // 21000000
+  dbg_printf("refFreq:%ld\n", CMU_ClockFreqGet(cmuClock_HFPER));  // 21000000
   dbg_printf("CTRL   :%lx\n", USART0->CTRL);    // 1025 = 0x0401
   dbg_printf("FRAME  :%lx\n", USART0->FRAME);   // 4105 = 0x1009
   dbg_printf("CMD    :%lx\n", USART0->CMD);     // 0
