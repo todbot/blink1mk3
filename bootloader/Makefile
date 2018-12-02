@@ -16,6 +16,8 @@ prep: prep-submodule
 	cp toboot-main-blink1.c tomu-bootloader/toboot
 	cp Makefile.toboot-blink1.mk tomu-bootloader/toboot
 	cp usb_desc.h tomu-bootloader/toboot
+	cp mcu_too.h tomu-bootloader/toboot
+	cp ws2812_spi.h tomu-bootloader/toboot
 
 build: prep
 	make -C tomu-bootloader/toboot -f Makefile.toboot-blink1.mk
