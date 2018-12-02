@@ -362,6 +362,11 @@ static void SpinDelay(uint32_t millis) {
 static void rebootToBootloader()
 {
   dbg_printf("\nbootloading...\n");
+  setLED(99,0,33, 0); // LED A
+  setLED(33,0,99, 1); // LED B
+  displayLEDs();
+  SpinDelay(100);
+  
   // set magic value to force bootloader
   toboot_runtime.magic = TOBOOT_FORCE_ENTRY_MAGIC;
   setLEDsAll(0,0,0);     // Turn off all LEDs
@@ -807,13 +812,17 @@ int main()
 
   uint32_t refFreq = CMU_ClockFreqGet(cmuClock_HFPER);
   dbg_printf("refFreq:%ld\n", refFreq);         // 21000000
-  dbg_printf("CTRL   :%ld\n", USART0->CTRL);    // 1025 = 0x0401
-  dbg_printf("FRAME  :%ld\n", USART0->FRAME);   // 4105 = 0x1009
-  dbg_printf("CMD    :%ld\n", USART0->CMD);     // 0
-  dbg_printf("STATUS :%ld\n", USART0->STATUS);  // 71   = 0x0047
-  dbg_printf("CLKDIV :%ld\n", USART0->CLKDIV);  // 768
-  dbg_printf("ROUTE  :%ld\n", USART0->ROUTE);
-  dbg_printf("HFPERCLKDIV: %ld\n", CMU->HFPERCLKDIV );
+  dbg_printf("CTRL   :%lx\n", USART0->CTRL);    // 1025 = 0x0401
+  dbg_printf("FRAME  :%lx\n", USART0->FRAME);   // 4105 = 0x1009
+  dbg_printf("CMD    :%lx\n", USART0->CMD);     // 0
+  dbg_printf("STATUS :%lx\n", USART0->STATUS);  // 71   = 0x0047
+  dbg_printf("CLKDIV :%lx\n", USART0->CLKDIV);  // 768  = 0x300
+  dbg_printf("ROUTE  :%lx\n", USART0->ROUTE);   // 0x0402
+  dbg_printf("CMU_CTRL         : %lx\n", CMU->CTRL );         // 0xc262c 796204 ?
+  dbg_printf("CMU_HFCORECLKDIV : %lx\n", CMU->HFCORECLKDIV ); // 0
+  dbg_printf("CMU_HFPERCLKDIV  : %lx\n", CMU->HFPERCLKDIV );  // 0x0100
+  dbg_printf("CMU_HFCORECLKEN0 : %lx\n", CMU->HFCORECLKEN0 ); // 0x0004
+  dbg_printf("CMU_HFPERCLKEN0  : %lx\n", CMU->HFPERCLKEN0 );  // 0x016b
 
   userDataLoad();
 

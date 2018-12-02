@@ -6,16 +6,16 @@
 // RGB triplet of 8-bit vals for input/output use
 // note GRB ordering for possible WS2812 output efficiency
 typedef struct {
-    uint8_t g;
     uint8_t r;
+    uint8_t g;
     uint8_t b;
 } rgb_t;
 
 // RGB triplet unsigned ints for internal use of 100x scale
 // used instead of floating point
 typedef struct {
-    int16_t g;
     int16_t r;
+    int16_t g;
     int16_t b;
 } rgbint_t;
 
