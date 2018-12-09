@@ -278,9 +278,6 @@ SL_ALIGN(4)
 userdata_t userData SL_ATTRIBUTE_ALIGN(4);
 
 
-uint8_t playstart_serverdown = 0;        // start play position for serverdown
-uint8_t playend_serverdown   = PATT_MAX; // end play position for serverdown 
-
 uint8_t playpos   = 0; // current play position
 uint8_t playstart = 0; // start play position
 uint8_t playend   = PATT_MAX; // end play position
@@ -311,8 +308,11 @@ const uint32_t led_update_millis = 10;  // tick msec
 uint32_t led_update_next;
 
 uint32_t pattern_update_next;
+
 uint16_t serverdown_millis;
 uint32_t serverdown_update_next;
+uint8_t  serverdown_playstart = 0;        // start play position for serverdown
+uint8_t  serverdown_playend   = PATT_MAX; // end play position for serverdown 
 
 uint32_t last_misc_millis;
 
@@ -596,8 +596,8 @@ static void updateLEDs(void)
         if( (long)(now - serverdown_update_next) > 0 ) {
             serverdown_millis = 0;  // disable this check
             playing = PLAY_ON;
-            playstart = playstart_serverdown;
-            playend   = playend_serverdown;
+            playstart = serverdown_playstart;
+            playend   = serverdown_playend;
             startPlaying();
         }
     }
@@ -1084,7 +1084,7 @@ static void handleMessage(uint8_t reportId)
   //  Server mode tickle        format: { 1, 'D', {1/0}, th,tl, st, sp, ep }
   //     1/0 == on/off
   //     t == tickle time
-  //     st == stop any current playing pattern and turn off (boolean)
+  //     st == stop any playing pattern & turn off or leave things (boolean)
   //     sp == pattern play start point
   //     ep == pattern play end point
   //
@@ -1092,11 +1092,11 @@ static void handleMessage(uint8_t reportId)
     uint8_t serverdown_on = inbuf[2];
     uint16_t t = ((uint16_t)inbuf[3] << 8) | inbuf[4];
     uint8_t stop          = inbuf[5];
-    playstart_serverdown  = inbuf[6];
-    playend_serverdown    = inbuf[7];
-    playend_serverdown++;  // to make 'p' play command
-    if( playend_serverdown == 0 || playend_serverdown > PATT_MAX )
-      playend_serverdown = PATT_MAX;
+    serverdown_playstart  = inbuf[6];
+    serverdown_playend    = inbuf[7];
+    serverdown_playend++;  // to make 'p' play command
+    if( serverdown_playend == 0 || serverdown_playend > PATT_MAX )
+      serverdown_playend = PATT_MAX;
     
     if( serverdown_on ) {
       serverdown_millis = t;
