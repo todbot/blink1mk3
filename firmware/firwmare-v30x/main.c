@@ -10,7 +10,8 @@
  * - Uses PLAY_ enum
  *
  * Differences from blink1mk3-test5:
- * - 
+ * - bootloader lockout command implemented
+ * - changed rgb_t to be r,g,b ordering instead of g,r,b
  *
  * Differences from blink1mk3-test3:
  * - fixed two-report HID descriptor to work on Windows (and you know, be actually correct)
@@ -44,6 +45,34 @@
  * 0xFFFF /
  * 
  * See "blink1mk3.ld" for details
+ */
+
+/*
+ * EFM32HG309 Pin Allocation
+ * --------------------
+ *  1 - PA0        - n/c (LED1 on Tomu)
+ *  2 - IOVDD_0    - VCC 3v3
+ *  3 - PC0        - ...
+ *  4 - PC1        - ...
+ *  5 - PB7        - Data In to WS2812-style LEDs (LED0 on Tomu)
+ *  6 - PB8        - n/c
+ *  7 - /RESET     - n/c
+ * 10 - PB13       - n/c (LEUART TX)
+ * 11 - PB14       - n/c (LEUART RX)
+ * 12 - AVDD_0     - VCC 3v3
+ * 13 - AVDD_2     - VCC 3v3
+ * 14 - DECOUPLE   - decouple cap
+ * 15 - USB VREGI  - USB +5V
+ * 16 - USB_VREGO  - VCC 3v3 
+ * 17 - PC14       - USB D-
+ * 18 - PC15       - USB D+ 
+ * 19 - PF0        - SWDCLK
+ * 20 - PF1        - SWDIO
+ * 21 - PF2        - n/c
+ * 23 - PE12       - ...
+ * 24 - PE13       - ...
+ * 25 - VSS        - Gnd
+ *
  */
 
 #include "capsense.h"
@@ -131,13 +160,14 @@ enum {
 // The high bit of ledn is used to signal that it's a startup param: 0x80
 // Thus the boot mode is ledn & 0x7F
 typedef struct { 
-    uint8_t playstart; // r from v206 mk2
-    uint8_t playend;   // g
-    uint8_t playcount; // b
-    uint8_t unused1;   // th
-    uint8_t unused2;   // tl
-    uint8_t bootmode;  // ledn, bootmode_t enum above
-    uint8_t bootloaderlock; // is programmatic triggering of bootloader allowed
+  uint8_t playstart; // r from v206 mk2
+  uint8_t playend;   // g
+  uint8_t playcount; // b
+  uint8_t unused1;   // th
+  uint8_t unused2;   // tl
+  //uint8_t servertickle_params
+  uint8_t bootmode;  // ledn, bootmode_t enum above
+  uint8_t bootloaderlock; // is programmatic triggering of bootloader allowed
 } startup_params_t;
 
 // array of LED data (sent to LEDs)
@@ -205,12 +235,12 @@ const userdata_t userFlash = {
     .bootloaderlock = 0,
   },
   {
-    //    G     R     B    fade ledn
-    { { 0x00, 0xff, 0x00 },  50, 1 }, // 0  red A
-    { { 0x00, 0xff, 0x00 },  50, 2 }, // 1  red B
+    //    R     G     B    fade ledn
+    { { 0xff, 0x00, 0x00 },  50, 1 }, // 0  red A
+    { { 0xff, 0x00, 0x00 },  50, 2 }, // 1  red B
     { { 0x00, 0x00, 0x00 },  50, 0 }, // 2  off both
-    { { 0xff, 0x00, 0x00 },  50, 1 }, // 3  grn A
-    { { 0xff, 0x00, 0x00 },  50, 2 }, // 4  grn B
+    { { 0x00, 0xff, 0x00 },  50, 1 }, // 3  grn A
+    { { 0x00, 0xff, 0x00 },  50, 2 }, // 4  grn B
     { { 0x00, 0x00, 0x00 },  50, 0 }, // 5  off both
     { { 0x00, 0x00, 0xff },  50, 1 }, // 6  blu A
     { { 0x00, 0x00, 0xff },  50, 2 }, // 7  blu B
@@ -1061,11 +1091,12 @@ static void handleMessage(uint8_t reportId)
   else if( cmd == 'D' ) {
     uint8_t serverdown_on = inbuf[2];
     uint16_t t = ((uint16_t)inbuf[3] << 8) | inbuf[4];
-    uint8_t stop = inbuf[5];
-    playstart  = inbuf[6];
-    playend    = inbuf[7];
-    if( playend == 0 || playend > PATT_MAX )
-      playend = PATT_MAX;
+    uint8_t stop          = inbuf[5];
+    playstart_serverdown  = inbuf[6];
+    playend_serverdown    = inbuf[7];
+    playend_serverdown++;  // to make 'p' play command
+    if( playend_serverdown == 0 || playend_serverdown > PATT_MAX )
+      playend_serverdown = PATT_MAX;
     
     if( serverdown_on ) {
       serverdown_millis = t;
