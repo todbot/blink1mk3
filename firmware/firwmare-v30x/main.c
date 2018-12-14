@@ -1,17 +1,26 @@
 /*********************************************************************************************
  *
- * blink1mk3 firmware -- EFM32HG-based, based off work by Tomu project (github.com/im-tomu)
+ * blink1mk3 firmware -- EFM32HG-based blink(1)
  *
  * 2018 Tod E. Kurt, http://todbot.com/blog/
+ *  Initially based off work by Tomu project (github.com/im-tomu)
  *
- * Differences from blink1mk3-test4:
- * - Implements serverdown logic
- * - 
- * - Uses PLAY_ enum
+ * For production:
+ *  - Disable all DEBUG_ defines
+ *  - Check blink1_version_ defines
+ *  - Check USB version strings in "descriptors.h"
+ *  - Verify latest bootloader is installed
+ * 
  *
  * Differences from blink1mk3-test5:
  * - bootloader lockout command implemented
+ * - fixed serverdown (aka "servetickle") logic
+ * - added serverdown boot settings
  * - changed rgb_t to be r,g,b ordering instead of g,r,b
+ *
+ * Differences from blink1mk3-test4:
+ * - Implements serverdown logic
+ * - Uses PLAY_ enum
  *
  * Differences from blink1mk3-test3:
  * - fixed two-report HID descriptor to work on Windows (and you know, be actually correct)
@@ -98,7 +107,7 @@
 #define blink1_version_major '3'
 #define blink1_version_minor '1'
 
-#define DEBUG 0    // enable debug messages output via LEUART, see 'debug.h'
+#define DEBUG 1    // enable debug messages output via LEUART, see 'debug.h'
 #define DEBUG_STARTUP 1
 // define this to print out cmd+args in handleMessage()
 #define DEBUG_HANDLEMESSAGE 0
@@ -150,25 +159,23 @@ TOBOOT_CONFIGURATION(0);
 // valid values for 'bootmode' in startup_param
 enum {
     BOOT_NORMAL = 0,  // normal <v205 behavior
-    BOOT_PLAY,        // play a script on startup (servertickle)
-    BOOT_OFF,         // turn off on startup, even with no USB
+    BOOT_PLAY   = 1,  // play a script on startup (servertickle)
+    BOOT_OFF    = 2,  // turn off on startup, even with no USB
 };
 
 // layout of the startup params bundle
-// byte size of startup_params_t must be same as patternline_t (6 bytes))
-// so in this mk2 hack, we have 6 bytes to play with {r,g,b, th,tl, ledn}
-// The high bit of ledn is used to signal that it's a startup param: 0x80
-// Thus the boot mode is ledn & 0x7F
+// (v206+ stored a smaller startup params in last patternline)
 typedef struct { 
+  uint8_t bootmode;  // ledn, bootmode_t enum above
   uint8_t playstart; // r from v206 mk2
   uint8_t playend;   // g
   uint8_t playcount; // b
-  uint8_t unused1;   // th
-  uint8_t unused2;   // tl
-  //uint8_t servertickle_params
-  uint8_t bootmode;  // ledn, bootmode_t enum above
   uint8_t bootloaderlock; // is programmatic triggering of bootloader allowed
-} startup_params_t;
+  uint8_t  serverdown_playstart;
+  uint8_t  serverdown_playend;
+  uint8_t  serverdown_unused1;
+  uint32_t serverdown_millis;
+} user_params_t;
 
 // array of LED data (sent to LEDs)
 rgb_t leds[nLEDs];
@@ -180,8 +187,9 @@ uint8_t ledn;
 #define PATT_MAX 32
 
 // define what is in the user data section
+//typedef struct __attribute((packed)) {
 typedef struct {
-  startup_params_t startup_params;
+  user_params_t startup_params;
   patternline_t pattern[PATT_MAX];
 } userdata_t;
 
@@ -227,13 +235,18 @@ typedef struct {
 // can at most be FLASH_PAGE_SIZE big (1024 bytes)
 __attribute__ ((section(".userFlashSection")))
 const userdata_t userFlash = {
+  .startup_params =
   {
-    .playstart = 0,
-    .playend = 0,
-    .playcount = 0,
-    .bootmode = BOOT_NORMAL,
+    .bootmode = BOOT_PLAY,
+    .playstart = 2,
+    .playend = 4,  // one more than
+    .playcount = 5,
     .bootloaderlock = 0,
+    .serverdown_playstart = 0,
+    .serverdown_playend = 0,
+    .serverdown_millis = 0,
   },
+  .pattern = 
   {
     //    R     G     B    fade ledn
     { { 0xff, 0x00, 0x00 },  50, 1 }, // 0  red A
@@ -277,11 +290,14 @@ usernote_t userNotes[NOTE_COUNT] SL_ATTRIBUTE_ALIGN(4);
 SL_ALIGN(4)
 userdata_t userData SL_ATTRIBUTE_ALIGN(4);
 
-
 uint8_t playpos   = 0; // current play position
+// 
 uint8_t playstart = 0; // start play position
 uint8_t playend   = PATT_MAX; // end play position
 uint8_t playcount = 0; // number of times to play loop, or 0=infinite
+//#define playstart userData.startup_params.playstart
+//#define playend   userData.startup_params.playend
+//#define playcount userData.startup_params.playcount
 
 // play modes, valid values for "playing"
 enum { 
@@ -378,7 +394,9 @@ void SysTick_Handler() {
 // ease-of-use function because I'm used to Arduino
 #define millis() (uptime_millis)
 
-/* simple delay() -- don't use this normally because it spinlocks the CPU*/
+/* 
+ * simple delay() -- don't use this normally because it spinlocks the CPU
+ */
 static void SpinDelay(uint32_t millis) {
   // Calculate the time at which we need to finish "sleeping".
   uint32_t sleep_until = uptime_millis + millis; 
@@ -392,6 +410,7 @@ static void SpinDelay(uint32_t millis) {
 static void rebootToBootloader()
 {
   dbg_printf("\nbootloading...\n");
+  // set LED bootloading colors
   setLED(99,0,33, 0); // LED A
   setLED(33,0,99, 1); // LED B
   displayLEDs();
@@ -539,7 +558,8 @@ void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n)
 static void updateLEDs(void)
 {
     uint32_t now = uptime_millis;
-
+    static bool inStartup = true;
+    
     // update LEDs every led_update_millis
     if( (long)(now - led_update_next) > 0 ) {
         led_update_next += led_update_millis;
@@ -548,6 +568,48 @@ static void updateLEDs(void)
         displayLEDs();
 
 #if 1
+        // pseudo logic
+        // if we've just been powered up
+        //   if bootmode is BOOT_OFF
+        //     no playing
+        //   if bootmode is BOOT_PLAY
+        //     startPlaying()
+        //   if bootmode is BOOT_NORMAL
+        //     do_nothing()
+        //     but if !usb, then play
+        //
+        // bad logic below
+        //   if usb is not setup
+        //     go into non-computer mode
+        //   if usb is set up
+        //     if bootmode is boot_play
+        //       play()
+        //     if bootmode is normal
+        //       do nothing
+        if( inStartup ) {
+          if( now > 500 ) { inStartup = false; }
+          
+          uint8_t bootmode = userData.startup_params.bootmode;
+          if( bootmode      == BOOT_OFF ) {
+            playing = PLAY_OFF;
+          }
+          else if( bootmode == BOOT_PLAY ) {
+            if( !playing ) { 
+              playing = PLAY_ON;
+              startPlaying();
+            }
+          }
+          else if( bootmode == BOOT_NORMAL ) {
+            if( !usbHasBeenSetup && !playing ) {
+              playing = PLAY_POWERUP;
+              startPlaying();              
+            }
+          }
+            
+        } // inStartup
+
+#endif
+#if 0
         // normal pre v206 behavior
         if( userData.startup_params.bootmode == BOOT_NORMAL ) { 
             // check for non-computer power up
@@ -563,7 +625,8 @@ static void updateLEDs(void)
                 }
             }
         }
-        else { 
+        else {
+          //          dbg_printf("boot_PLAY\n");
             if( userData.startup_params.bootmode == BOOT_PLAY) { 
                 if( !playing && now > 500 && now < 1000 ) { // 500 msec wait
                     playing = PLAY_ON;
@@ -575,20 +638,6 @@ static void updateLEDs(void)
 
 #endif
 
-#if 0
-        // check for non-computer power up
-        if( !usbHasBeenSetup ) {
-            if( !playing && now > 500 ) {  // 500 msec wait
-                playing = PLAY_POWERUP;
-                startPlaying();
-            }
-        }
-        else {  // else usb is setup...
-            if( playing == PLAY_POWERUP ) { // ...but we started a powerup play, so reset
-                off();
-            }
-        }
-#endif
     } // if led_update_next
 
     // serverdown logic
@@ -602,7 +651,7 @@ static void updateLEDs(void)
         }
     }
 
-    // playing light pattern
+    // playing light pattern logic
     if( playing ) {
         if( (long)(millis() - pattern_update_next) > 0  ) { // time to get next line
             ctmp = userData.pattern[playpos].color;
@@ -620,11 +669,10 @@ static void updateLEDs(void)
               hsbtorgb( h,s,v, &ctmp.r, &ctmp.g, &ctmp.b );  // NOTE: writes to ctmp.{r,g,b}
             }
             
-#if 0
+#if 0       // print millis on each pattern line
             dbg_printf("%ld\n",millis());
 #endif
-#if 0            
-            // enabling this causes a lag in pattern playing because of blocking LEUART writes
+#if 0       // enabling this causes lag in pattern playing because of blocking LEUART writes
             dbg_printf("%ld patt %d rgb:%x %x %x t:%d l:%d\n", millis(),
                        playpos, ctmp.r, ctmp.g, ctmp.b, ttmp, ledn);
 #endif            
@@ -650,6 +698,8 @@ static void updateLEDs(void)
     
 }
 
+// ------------------------------------------------------------------------
+
 //
 // Hardawre bootloader trigger support
 //
@@ -658,11 +708,11 @@ static void updateLEDs(void)
 #define SWCLK_PIN 0
 uint8_t bootloadPinTest = 0;
 
-/**
+/**************************************************************************
  * Check SWDAT & SWCLK pins for shorting
  *  to boot to bootloader
  * FIXME: does this all need to be in an atomic block?
- */
+ *************************************************************************/
 static void checkSWDPins()
 {
   // SWCLK is output, SWDIO is input
@@ -685,6 +735,8 @@ static void checkSWDPins()
   bootloadPinTest--; // decay away
   //dbg_printf("swdt:%d %d\n", bootloadPinTest,v);
 }
+
+// ------------------------------------------------------------------------
 
 /**********************************************************************
  * Tend to various housekeeping
@@ -728,45 +780,6 @@ static void updateMisc()
   //if( usbState == USBD_STATE_CONFIGURED ) {
   // usbHasBeenSetup = true;
   //}
-
-  // enabling this makes it impossible to go into bootloader mode, why?
-#if 0
-  // Capture/sample the state of the capacitive touch sensors.
-  CAPSENSE_Sense();
-
-  if( CAPSENSE_getPressed(BUTTON0_CHANNEL) ) {
-    playing = PLAY_DIRECTLED ; // sigh
-    setLED( 0, 255, 0, 2 );
-    
-  }
-#endif
-  
-  /*
-  // Analyse the sample, and if the touch-pads on the green LED side is
-  // touched, rapid blink the green LED ten times.
-  if (CAPSENSE_getPressed(BUTTON0_CHANNEL) &&
-      !CAPSENSE_getPressed(BUTTON1_CHANNEL)) {
-    
-    int i;
-    for (i = 10; i > 0; i--) {
-      GPIO_PinOutClear(gpioPortA, 0);
-      SpinDelay(100);
-      GPIO_PinOutSet(gpioPortA, 0);
-      SpinDelay(100);
-    }
-    // Analyse the same sample, and if the touch-pads on the red LED side is
-    // touched, rapid blink the red LED ten times.
-  } else if (CAPSENSE_getPressed(BUTTON1_CHANNEL) &&
-             !CAPSENSE_getPressed(BUTTON0_CHANNEL)) {
-    int i;
-    for (i = 10; i > 0; i--) {
-      GPIO_PinOutClear(gpioPortB, 7);
-      SpinDelay(100);
-      GPIO_PinOutSet(gpioPortB, 7);
-      SpinDelay(100);
-    }
-  }
-  */
 
 }
 
@@ -820,7 +833,7 @@ int main()
 
   // Enable the capacitive touch sensor. Remember, this consumes TIMER0 and
   // TIMER1, so those are off-limits to us.
-  CAPSENSE_Init();
+  // CAPSENSE_Init();
 
   // Sets up and enable the `SysTick_Handler' interrupt to fire once every 1ms.
   // ref: http://community.silabs.com/t5/Official-Blog-of-Silicon-Labs/Chapter-5-MCU-Clocking-Part-2-The-SysTick-Interrupt/ba-p/145297
@@ -840,6 +853,7 @@ int main()
 
   ws2812_setupSpi();
 
+#if 0
   dbg_printf("refFreq:%ld\n", CMU_ClockFreqGet(cmuClock_HFPER));  // 21000000
   dbg_printf("CTRL   :%lx\n", USART0->CTRL);    // 1025 = 0x0401
   dbg_printf("FRAME  :%lx\n", USART0->FRAME);   // 4105 = 0x1009
@@ -852,19 +866,52 @@ int main()
   dbg_printf("CMU_HFPERCLKDIV  : %lx\n", CMU->HFPERCLKDIV );  // 0x0100
   dbg_printf("CMU_HFCORECLKEN0 : %lx\n", CMU->HFCORECLKEN0 ); // 0x0004
   dbg_printf("CMU_HFPERCLKEN0  : %lx\n", CMU->HFPERCLKEN0 );  // 0x016b
-
+#endif
+  
   userDataLoad();
 
+  uint8_t bootmode = userData.startup_params.bootmode;
+  dbg_printf("before loading startup params. %d bootmode:%d/%d\n", sizeof(userdata_t), bootmode, userData.startup_params.bootmode );
+  // load up variables 
+  if( bootmode == BOOT_PLAY ) {
+    dbg_str("loading startup params\n");
+    // general playing variables
+    playstart = userData.startup_params.playstart;
+    playend   = userData.startup_params.playend;
+    playcount = userData.startup_params.playcount;
+#if 0
+    // serverdown variables
+    serverdown_playstart = userData.startup_params.serverdown_playstart;
+    serverdown_playend   = userData.startup_params.serverdown_playend;
+    serverdown_millis    = userData.startup_params.serverdown_millis;
+    if( serverdown_millis ) {
+      serverdown_update_next = 500 + millis() + serverdown_millis; // FIXME: 500 because that's our startup delay
+    }
+#endif
+  }    
+  
 #if DEBUG_STARTUP
+  #if 0
   // debug: dump out loaded pattern
-  for( int i=0; i<PATT_MAX; i++) {
+  for( int i=0; i<8; i++) { // should be PATT_MAX
     ctmp = userData.pattern[i].color;
     ttmp = userData.pattern[i].dmillis;
     ledn = userData.pattern[i].ledn;
     dbg_printf("patt[%d] rgb:%2x%2x%2x t:%d l:%d\n",
                i, ctmp.r, ctmp.g, ctmp.b, ttmp, ledn);
   }
+  #endif
+  
+  // debug: dump out state variables
+  dbg_printf("bootmode:%d  playstart/end/count: %d/%d/%d\n",
+             bootmode, playstart, playend, playcount);
+  dbg_printf("userboot:%d  playstart/end/count: %d/%d/%d\n",
+             userData.startup_params.bootmode, userData.startup_params.playstart,
+             userData.startup_params.playend, userData.startup_params.playcount);
+  dbg_printf("serverdown_playstart/playend/millis: %d/%d/%d\n",
+             serverdown_playstart, serverdown_playend, serverdown_millis);
 #endif
+
   
   notesLoadAll();
   
@@ -880,9 +927,9 @@ int main()
   UNUSED(rc);
   dbg_printf("usbd_init rc:%d\n", rc);
 
+#if 0
   // When using a debugger it is practical to uncomment the following three
   // lines to force host to re-enumerate the device.
-#if 0
   USBD_Disconnect();      
   USBTIMER_DelayMs(1000); 
   USBD_Connect();         
@@ -892,7 +939,6 @@ int main()
   for( uint8_t i=255; i>0; i-- ) {
     SpinDelay(1);
     uint8_t j = i>>4;      // not so bright, please
-    //setLEDsAll(j,j,j);
     setLED(j,j,j, 0); // LED A
     setLED(j,j,j, 1); // LED B
     displayLEDs();
@@ -915,33 +961,33 @@ int main()
 /**********************************************************************
  * handleMessage(char* inbuf) -- main command router
  *
- * inbuf[] is 8 bytes long
+ * inbuf[] is 8 bytes long (or 64 bytes for report2)
  *  byte0 = report-id
  *  byte1 = command
  *  byte2..byte7 = args for command
  *
  * Available commands:
- *    - Fade to RGB color       format: { 1, 'c', r,g,b,     th,tl, n }
- *    - Set RGB color now       format: { 1, 'n', r,g,b,       0,0, n } (*)
- *    - Read current RGB color  format: { 1, 'r', n,0,0,       0,0, n } (2)
- *    - Serverdown tickle/off   format: { 1, 'D', on,th,tl,  st,sp,ep } (*)
- *    - PlayLoop                format: { 1, 'p', on,sp,ep,c,    0, 0 } (2)
- *    - Playstate readback      format: { 1, 'S', 0,0,0,       0,0, 0 } (2)
- *    - Set color pattern line  format: { 1, 'P', r,g,b,     th,tl, p }
- *    - Save color patterns     format: { 1, 'W', 0,0,0,       0,0, 0 } (2)
- *    - read color pattern line format: { 1, 'R', 0,0,0,       0,0, p }
- *    - Set ledn                format: { 1, 'l', n,0,0,       0,0, 0 } (2+)
- *    - Read EEPROM location    format: { 1, 'e', ad,0,0,      0,0, 0 } (1)
- *    - Write EEPROM location   format: { 1, 'E', ad,v,0,      0,0, 0 } (1)
- *    - Get version             format: { 1, 'v', 0,0,0,       0,0, 0 }
- *    - Test command            format: { 1, '!', 0,0,0,       0,0, 0 }
- *    - Write 50-byte note      format: { 2, 'F', noteid, data0 ... data99 } (3)
- *    - Read  50-byte note      format: { 2, 'f', noteid, data0 ... data99 } (3)
- *    - Go to bootloader        format: { 1, 'G', 'o','B','o','o','t',0 } (3)
- *    - Lock go to bootload     format: { 2','L'  'o','c','k','B','o','o','t','l','o','a','d'} (3)
- *    - Set startup params      format: { 1, 'B', bootmode, playstart,playend,playcnt,0,0} (3)
- *    - Get startup params      format: { 1, 'b', 0,0,0, 0,0,0        } (3)
- *    - Server mode tickle      format: { 1, 'D', {1/0},th,tl, {1,0},sp, ep }
+ *  - Fade to RGB color       format: { 1, 'c', r,g,b,     th,tl, n }
+ *  - Set RGB color now       format: { 1, 'n', r,g,b,       0,0, n } (*)
+ *  - Read current RGB color  format: { 1, 'r', n,0,0,       0,0, n } (2)
+ *  - Serverdown tickle/off   format: { 1, 'D', on,th,tl,  st,sp,ep } (*)
+ *  - PlayLoop                format: { 1, 'p', on,sp,ep,c,    0, 0 } (2)
+ *  - Playstate readback      format: { 1, 'S', 0,0,0,       0,0, 0 } (2)
+ *  - Set color pattern line  format: { 1, 'P', r,g,b,     th,tl, p }
+ *  - Save color patterns     format: { 1, 'W', 0,0,0,       0,0, 0 } (2)
+ *  - read color pattern line format: { 1, 'R', 0,0,0,       0,0, p }
+ *  - Set ledn                format: { 1, 'l', n,0,0,       0,0, 0 } (2+)
+ *  - Read EEPROM location    format: { 1, 'e', ad,0,0,      0,0, 0 } (1)
+ *  - Write EEPROM location   format: { 1, 'E', ad,v,0,      0,0, 0 } (1)
+ *  - Get version             format: { 1, 'v', 0,0,0,       0,0, 0 }
+ *  - Test command            format: { 1, '!', 0,0,0,       0,0, 0 }
+ *  - Write 50-byte note      format: { 2, 'F', noteid, data0 ... data99 } (3)
+ *  - Read  50-byte note      format: { 2, 'f', noteid, data0 ... data99 } (3)
+ *  - Go to bootloader        format: { 1, 'G', 'o','B','o','o','t',0 } (3)
+ *  - Lock go to bootload     format: { 2','L'  'o','c','k','B','o','o','t','l','o','a','d'} (3)
+ *  - Set startup params      format: { 1, 'B', bootmode, playstart,playend,playcnt,0,0} (3)
+ *  - Get startup params      format: { 1, 'b', 0,0,0, 0,0,0        } (3)
+ *  - Server mode tickle      format: { 1, 'D', {1/0},th,tl, {1,0},sp, ep }
  *
  * x Fade to RGB color        format: { 1, 'c', r,g,b,      th,tl, ledn }
  * x Set RGB color now        format: { 1, 'n', r,g,b,        0,0, ledn }
@@ -1028,7 +1074,7 @@ static void handleMessage(uint8_t reportId)
   else if( cmd == 'S' ) {
     reportToSend[2] = playing;
     reportToSend[3] = playstart;
-    reportToSend[4] = playend;
+    reportToSend[4] = max(playend-1,0);
     reportToSend[5] = playcount;
     reportToSend[6] = playpos;
     reportToSend[7] = 0;
@@ -1094,7 +1140,7 @@ static void handleMessage(uint8_t reportId)
     uint8_t stop          = inbuf[5];
     serverdown_playstart  = inbuf[6];
     serverdown_playend    = inbuf[7];
-    serverdown_playend++;  // to make 'p' play command
+    serverdown_playend++;  // to make like 'p' play command
     if( serverdown_playend == 0 || serverdown_playend > PATT_MAX )
       serverdown_playend = PATT_MAX;
     
@@ -1108,19 +1154,25 @@ static void handleMessage(uint8_t reportId)
       off();
     }
   }
-
-  // Set startup parameters     format: {1, 'B', bootmode, playstart, playend, playcount, 0,0} 
+  //
+  // Set startup parameters     format: {2, 'B', bootmode, playstart, playend, playcount, 0,0} 
   //
   else if( cmd == 'B' ) { 
-    userData.startup_params.bootmode  = inbuf[2]; // ledn
+    userData.startup_params.bootmode  = inbuf[2]; // ledn (from v206+)
     userData.startup_params.playstart = inbuf[3]; // r
     userData.startup_params.playend   = inbuf[4]; // g
     userData.startup_params.playcount = inbuf[5]; // b
-    userData.startup_params.unused1   = inbuf[6]; // th
-    userData.startup_params.unused2   = inbuf[7]; // tl
-
+#if 1 
+    // serverdown variables
+    userData.startup_params.serverdown_playstart  = inbuf[6]; 
+    userData.startup_params.serverdown_playend    = inbuf[7]; 
+    userData.startup_params.serverdown_millis     = (inbuf[8] << 8) | inbuf[9]; 
+#endif
+    
     // fixup playend, copied from 'p'lay/pause
-    // FIXME: find a real way to handle this 
+    // handles case were playend is badly-defined
+    // at sets to it be end+1 not end, because of dim historical for-loop reasons
+    // (FIXME: is there a better way to handle this? )
     if( userData.startup_params.playend == 0 || userData.startup_params.playend > PATT_MAX )
       userData.startup_params.playend = PATT_MAX;
     else
@@ -1128,18 +1180,21 @@ static void handleMessage(uint8_t reportId)
 
     doPatternWrite = true;; // causes all userData to be saved // FIXME: rename
   }
-
-  // Get Startup Params      format: { 1, 'b', 0,0,0,0, 0,0 }
+  //
+  // Get Startup Params      format: { 2, 'b', 0,0,0,0, 0,0 }
   //
   else if( cmd == 'b' ) {
     reportToSend[2] = userData.startup_params.bootmode;
     reportToSend[3] = userData.startup_params.playstart;
-    reportToSend[4] = userData.startup_params.playend;
+    reportToSend[4] = max(userData.startup_params.playend-1,0);
     reportToSend[5] = userData.startup_params.playcount;
-    reportToSend[6] = userData.startup_params.unused1;
-    reportToSend[7] = userData.startup_params.unused2;
+#if 1
+    reportToSend[6] = userData.startup_params.serverdown_playstart;
+    reportToSend[7] = max(userData.startup_params.serverdown_playend-1,0);
+    reportToSend[8] = userData.startup_params.serverdown_millis >> 8;
+    reportToSend[9] = userData.startup_params.serverdown_millis & 0xff;
+#endif
   }
-  
   //
   //  Get version               format: { 1, 'v', 0,0,0,        0,0, 0 }
   //
@@ -1149,13 +1204,13 @@ static void handleMessage(uint8_t reportId)
     reportToSend[4] = blink1_version_minor;
   }
   //
-  // Go to bootloader
+  // Go to bootloader          format: { 2, 'G','o','B','o','o','t' }
   // Check against command "GoBoot"
   //
   else if( cmd == 'G' ) {
     if( inbuf[2] == 'o' && inbuf[3] == 'B' && inbuf[4] == 'o' && inbuf[5] == 'o' && inbuf[6] == 't' ) {
       dbg_str("GoBoot");
-      if( userData.startup_params.bootloaderlock ) {
+      if( userData.startup_params.bootloaderlock ) {  // firmware has been locked
         reportToSend[1] = 'L'; // send ack but fail because lock
         reportToSend[2] = 'O';
         reportToSend[3] = 'C';
@@ -1174,6 +1229,7 @@ static void handleMessage(uint8_t reportId)
     }
   }
   //
+  // Lock out USB bootloader   format: {2, 'L','o','c','k','B','o','o','t','l','o','o','d'}
   // 
   else if( cmd == 'L' && rId == 2 ) {
     char* bp = (char*) (&inbuf[2]);
