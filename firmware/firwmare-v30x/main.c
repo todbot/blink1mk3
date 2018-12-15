@@ -237,7 +237,7 @@ __attribute__ ((section(".userFlashSection")))
 const userdata_t userFlash = {
   .startup_params =
   {
-    .bootmode = BOOT_PLAY,
+    .bootmode = BOOT_NORMAL,
     .playstart = 2,
     .playend = 4,  // one more than
     .playcount = 5,
@@ -325,7 +325,7 @@ uint32_t led_update_next;
 
 uint32_t pattern_update_next;
 
-uint16_t serverdown_millis;
+uint16_t serverdown_millis = 0;
 uint32_t serverdown_update_next;
 uint8_t  serverdown_playstart = 0;        // start play position for serverdown
 uint8_t  serverdown_playend   = PATT_MAX; // end play position for serverdown 
@@ -527,6 +527,7 @@ static void off(void)
  *********************************************************************/
 static void startPlaying( void )
 {
+  dbg_str("-startPlaying-");
     playpos = playstart;
     pattern_update_next = millis(); //uptime_millis; // millis(); // now;
     //pattern_update_next = 0; // invalidate it so plays immediately
@@ -553,7 +554,8 @@ void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n)
  * - periodically calls the rgb fader code to fade any actively moving colors
  * - controls sequencing of a light pattern, if playing
  * - triggers pattern playing on USB disconnect
- *
+ * - handles serverdown logic
+ * - handles startup behavior logic 
  **********************************************************************/
 static void updateLEDs(void)
 {
@@ -567,81 +569,42 @@ static void updateLEDs(void)
         rgb_updateCurrent();  // playing=3 => direct LED addressing (not anymore)
         displayLEDs();
 
-#if 1
-        // pseudo logic
+        // startup processing logic
+        // pseudo code:
         // if we've just been powered up
-        //   if bootmode is BOOT_OFF
-        //     no playing
-        //   if bootmode is BOOT_PLAY
-        //     startPlaying()
-        //   if bootmode is BOOT_NORMAL
-        //     do_nothing()
-        //     but if !usb, then play
+        //   if bootmode is BOOT_OFF:     off, no playing
+        //   if bootmode is BOOT_PLAY:    play()
+        //   if bootmode is BOOT_NORMAL:  do_nothing(), but if !usb, play()
         //
-        // bad logic below
-        //   if usb is not setup
-        //     go into non-computer mode
-        //   if usb is set up
-        //     if bootmode is boot_play
-        //       play()
-        //     if bootmode is normal
-        //       do nothing
         if( inStartup ) {
-          if( now > 500 ) { inStartup = false; }
+          if( now > 500 ) { inStartup = false; } // after 500ms we are started
           
-          uint8_t bootmode = userData.startup_params.bootmode;
-          if( bootmode      == BOOT_OFF ) {
+          uint8_t bmode = userData.startup_params.bootmode;
+          if( bmode      == BOOT_OFF ) {
+            dbg_str("BOOT_OFF\n");
             playing = PLAY_OFF;
           }
-          else if( bootmode == BOOT_PLAY ) {
+          else if( bmode == BOOT_PLAY ) {
+            dbg_str("BOOT_PLAY\n");
             if( !playing ) { 
               playing = PLAY_ON;
               startPlaying();
             }
           }
-          else if( bootmode == BOOT_NORMAL ) {
+          else if( bmode == BOOT_NORMAL ) {
+            dbg_str("BOOT_NORMAL\n");
             if( !usbHasBeenSetup && !playing ) {
               playing = PLAY_POWERUP;
-              startPlaying();              
+              startPlaying();
             }
           }
-            
         } // inStartup
-
-#endif
-#if 0
-        // normal pre v206 behavior
-        if( userData.startup_params.bootmode == BOOT_NORMAL ) { 
-            // check for non-computer power up
-            if( !usbHasBeenSetup ) {
-                if( !playing && now > 500 ) {  // 500 msec wait
-                    playing = PLAY_POWERUP;
-                    startPlaying();
-                }
-            }
-            else {  // else usb is setup...
-                if( playing == PLAY_POWERUP ) { // ...but we started a powerup play, so reset
-                    off();
-                }
-            }
-        }
-        else {
-          //          dbg_printf("boot_PLAY\n");
-            if( userData.startup_params.bootmode == BOOT_PLAY) { 
-                if( !playing && now > 500 && now < 1000 ) { // 500 msec wait
-                    playing = PLAY_ON;
-                    startPlaying();
-                }
-            }
-            // else do nothing
-        }
-
-#endif
 
     } // if led_update_next
 
     // serverdown logic
     if( serverdown_millis != 0 ) {  // i.e. servermode has been turned on
+      dbg_str("SERVERDOWN");
         if( (long)(now - serverdown_update_next) > 0 ) {
             serverdown_millis = 0;  // disable this check
             playing = PLAY_ON;
@@ -669,8 +632,8 @@ static void updateLEDs(void)
               hsbtorgb( h,s,v, &ctmp.r, &ctmp.g, &ctmp.b );  // NOTE: writes to ctmp.{r,g,b}
             }
             
-#if 0       // print millis on each pattern line
-            dbg_printf("%ld\n",millis());
+#if 1       // print millis on each pattern line
+            dbg_printf("%ld %d %d %d\n",millis(),playpos, playstart,playend);
 #endif
 #if 0       // enabling this causes lag in pattern playing because of blocking LEUART writes
             dbg_printf("%ld patt %d rgb:%x %x %x t:%d l:%d\n", millis(),
@@ -870,29 +833,29 @@ int main()
   
   userDataLoad();
 
-  uint8_t bootmode = userData.startup_params.bootmode;
-  dbg_printf("before loading startup params. %d bootmode:%d/%d\n", sizeof(userdata_t), bootmode, userData.startup_params.bootmode );
+  #if DEBUG_STARTUP
+  dbg_printf("before loading startup params. size:%d bootmode:%d\n", sizeof(userdata_t), userData.startup_params.bootmode );
+  #endif
+  
   // load up variables 
-  if( bootmode == BOOT_PLAY ) {
+  if( userData.startup_params.bootmode == BOOT_PLAY ) {
     dbg_str("loading startup params\n");
-    // general playing variables
     playstart = userData.startup_params.playstart;
     playend   = userData.startup_params.playend;
     playcount = userData.startup_params.playcount;
-#if 0
     // serverdown variables
+    #if 0
     serverdown_playstart = userData.startup_params.serverdown_playstart;
     serverdown_playend   = userData.startup_params.serverdown_playend;
     serverdown_millis    = userData.startup_params.serverdown_millis;
     if( serverdown_millis ) {
       serverdown_update_next = 500 + millis() + serverdown_millis; // FIXME: 500 because that's our startup delay
     }
-#endif
+    #endif
   }    
   
-#if DEBUG_STARTUP
-  #if 0
-  // debug: dump out loaded pattern
+  #if DEBUG_STARTUP
+  #if 0  // debug: dump out loaded pattern
   for( int i=0; i<8; i++) { // should be PATT_MAX
     ctmp = userData.pattern[i].color;
     ttmp = userData.pattern[i].dmillis;
@@ -903,14 +866,14 @@ int main()
   #endif
   
   // debug: dump out state variables
-  dbg_printf("bootmode:%d  playstart/end/count: %d/%d/%d\n",
-             bootmode, playstart, playend, playcount);
-  dbg_printf("userboot:%d  playstart/end/count: %d/%d/%d\n",
+  dbg_printf("variable:      playstart/end/cnt: %d/%d/%d\n",
+             playstart, playend, playcount);
+  dbg_printf("userdata: bm:%d playstart/end/cnt: %d/%d/%d\n",
              userData.startup_params.bootmode, userData.startup_params.playstart,
              userData.startup_params.playend, userData.startup_params.playcount);
   dbg_printf("serverdown_playstart/playend/millis: %d/%d/%d\n",
              serverdown_playstart, serverdown_playend, serverdown_millis);
-#endif
+  #endif
 
   
   notesLoadAll();
@@ -944,7 +907,6 @@ int main()
     displayLEDs();
   }
   
-  //startPlaying();  // to load pattern up
   off();
   displayLEDs(); // why this here, to prime the system?
 
@@ -1074,7 +1036,7 @@ static void handleMessage(uint8_t reportId)
   else if( cmd == 'S' ) {
     reportToSend[2] = playing;
     reportToSend[3] = playstart;
-    reportToSend[4] = max(playend-1,0);
+    reportToSend[4] = playend-1; // FIXME
     reportToSend[5] = playcount;
     reportToSend[6] = playpos;
     reportToSend[7] = 0;
@@ -1140,10 +1102,10 @@ static void handleMessage(uint8_t reportId)
     uint8_t stop          = inbuf[5];
     serverdown_playstart  = inbuf[6];
     serverdown_playend    = inbuf[7];
-    serverdown_playend++;  // to make like 'p' play command
     if( serverdown_playend == 0 || serverdown_playend > PATT_MAX )
       serverdown_playend = PATT_MAX;
-    
+    else     serverdown_playend++;  // to make like 'p' play command
+
     if( serverdown_on ) {
       serverdown_millis = t;
       serverdown_update_next = millis() + (t*10); //uptime_millis + (t*10);
@@ -1162,7 +1124,7 @@ static void handleMessage(uint8_t reportId)
     userData.startup_params.playstart = inbuf[3]; // r
     userData.startup_params.playend   = inbuf[4]; // g
     userData.startup_params.playcount = inbuf[5]; // b
-#if 1 
+#if 0 
     // serverdown variables
     userData.startup_params.serverdown_playstart  = inbuf[6]; 
     userData.startup_params.serverdown_playend    = inbuf[7]; 
@@ -1186,11 +1148,11 @@ static void handleMessage(uint8_t reportId)
   else if( cmd == 'b' ) {
     reportToSend[2] = userData.startup_params.bootmode;
     reportToSend[3] = userData.startup_params.playstart;
-    reportToSend[4] = max(userData.startup_params.playend-1,0);
+    reportToSend[4] = userData.startup_params.playend-1;  // FIXME
     reportToSend[5] = userData.startup_params.playcount;
-#if 1
+#if 0
     reportToSend[6] = userData.startup_params.serverdown_playstart;
-    reportToSend[7] = max(userData.startup_params.serverdown_playend-1,0);
+    reportToSend[7] = userData.startup_params.serverdown_playend-1; // FIXME
     reportToSend[8] = userData.startup_params.serverdown_millis >> 8;
     reportToSend[9] = userData.startup_params.serverdown_millis & 0xff;
 #endif
