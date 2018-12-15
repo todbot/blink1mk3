@@ -164,6 +164,12 @@ program-dfu:
 	dfu-suffix -v 27B8 -p 01EE -a $(TARGET).dfu
 	dfu-util -v --device 27B8:01EE --download $(TARGET).dfu
 
+# save the entire memory contents to a file
+savebin:
+	echo "power on \n savebin $(TARGET)-full.bin,0x0,0xffff \nexit\n" > jlink-tmp.txt
+	jlinkexe -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
+	rm jlink-tmp.txt
+
 size:
 	arm-none-eabi-size  $(TARGET).elf
 
