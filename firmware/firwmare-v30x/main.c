@@ -11,6 +11,8 @@
  *  - Check USB version strings in "descriptors.h"
  *  - Verify latest bootloader is installed
  * 
+ * Production firmware:
+ * - v302 is first production firmware
  *
  * Differences from blink1mk3-test5:
  * - bootloader lockout command implemented
@@ -105,10 +107,10 @@
 #include <stdbool.h>
 
 #define blink1_version_major '3'
-#define blink1_version_minor '1'
+#define blink1_version_minor '2'
 
-#define DEBUG 1    // enable debug messages output via LEUART, see 'debug.h'
-#define DEBUG_STARTUP 1
+#define DEBUG 0    // enable debug messages output via LEUART, see 'debug.h'
+#define DEBUG_STARTUP 0
 // define this to print out cmd+args in handleMessage()
 #define DEBUG_HANDLEMESSAGE 0
 
@@ -161,6 +163,7 @@ enum {
     BOOT_NORMAL = 0,  // normal <v205 behavior
     BOOT_PLAY   = 1,  // play a script on startup (servertickle)
     BOOT_OFF    = 2,  // turn off on startup, even with no USB
+    BOOT_SERVERDOWN=3, // serverdown mode?  //just an idea, not implemented
 };
 
 // layout of the startup params bundle
@@ -238,9 +241,9 @@ const userdata_t userFlash = {
   .startup_params =
   {
     .bootmode = BOOT_NORMAL,
-    .playstart = 2,
-    .playend = 4,  // one more than
-    .playcount = 5,
+    .playstart = 0,
+    .playend = PATT_MAX,  // one more than
+    .playcount = 0,
     .bootloaderlock = 0,
     .serverdown_playstart = 0,
     .serverdown_playend = 0,
@@ -334,10 +337,12 @@ uint32_t last_misc_millis;
 
 // Set by 'G' "gobootload" command
 bool shouldRebootToBootloader = false;
-// Set when a Note write is issued
+// Set when a Note write should be issued
 bool doNotesWrite = false;
 // Set when USB is properly setup by host PC
 bool usbHasBeenSetup = false;
+// In powerup sequence (defaults to true) 
+bool inStartup = true;
 
 // For sending back HID Descriptor in setupCmd
 static void  *hidDescriptor = NULL;
@@ -558,13 +563,12 @@ void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n)
 static void updateLEDs(void)
 {
     uint32_t now = uptime_millis;
-    static bool inStartup = true;
     
     // update LEDs every led_update_millis
     if( (long)(now - led_update_next) > 0 ) {
         led_update_next += led_update_millis;
 
-        rgb_updateCurrent();  // playing=3 => direct LED addressing (not anymore)
+        rgb_updateCurrent(); // playing=3 => direct LED addressing (not anymore)
         displayLEDs();
 
         // startup processing logic
@@ -584,34 +588,42 @@ static void updateLEDs(void)
           }
           else if( bmode == BOOT_PLAY ) {
             dbg_str("BOOT_PLAY\n");
-            if( !playing ) { 
+            if( !playing ) {
               playing = PLAY_ON;
               startPlaying();
             }
           }
           else if( bmode == BOOT_NORMAL ) {
             dbg_str("BOOT_NORMAL\n");
-            if( !usbHasBeenSetup && !playing ) {
-              playing = PLAY_POWERUP;
-              startPlaying();
+            if( !usbHasBeenSetup ) {
+              if( !playing ) {
+                playing = PLAY_POWERUP;
+                startPlaying();
+              }
+            }
+            else { // usbHasBeenSetUp
+              // do nothing
+              playing = PLAY_OFF;
             }
           }
-          led_update_next = now;
+          led_update_next = now; // so first pattern timing is more accurate
         } // end inStartup
 
-    } // if led_update_next
-
-    // serverdown logic
-    if( serverdown_millis != 0 ) {  // i.e. servermode has been turned on
-      dbg_str("SERVERDOWN");
-        if( (long)(now - serverdown_update_next) > 0 ) {
+        // serverdown logic
+        if( serverdown_millis != 0 ) {  // i.e. servermode has been turned on
+          dbg_str("S");
+          if( (long)(now - serverdown_update_next) > 0 ) {
             serverdown_millis = 0;  // disable this check
             playing = PLAY_ON;
             playstart = serverdown_playstart;
             playend   = serverdown_playend;
+            playcount = 0; // play infinitely
             startPlaying();
-        }
-    }
+          }
+        } // serverdown logic
+
+    } // if led_update_next
+
 
     // playing light pattern logic
     if( playing ) {
@@ -632,7 +644,7 @@ static void updateLEDs(void)
             }
             
 #if 1       // print millis on each pattern line
-            dbg_printf("\n%ld %d %d %d ",millis(),playpos, playstart,playend);
+            dbg_printf("\n%ld %d %d %d %d ",millis(),playpos, playstart,playend,playcount);
 #endif
 #if 0       // enabling this causes lag in pattern playing because of blocking LEUART writes
             dbg_printf("%ld patt %d rgb:%x %x %x t:%d l:%d\n", millis(),
@@ -713,7 +725,8 @@ static void updateMisc()
     // ':' == powered but no computer
     // a number is another USBD_State_TypeDef
     //write_char((usbState==USBD_STATE_CONFIGURED) ? '.' : (usbState==USBD_STATE_DEFAULT) ? ':': 0+usbState);
-    write_char((usbHasBeenSetup) ? '.' : ':');
+    //write_char((usbHasBeenSetup) ? '.' : ':');
+    dbg_ch((usbHasBeenSetup) ? '.' : ':');
 
     if( shouldRebootToBootloader ) {
       rebootToBootloader();  // and now we die
@@ -804,7 +817,7 @@ int main()
     while (1);
   }
 
-  setupLeuart();
+  dbg_setup();  // sets up LEUART if DEBUG is set
 
   dbg_str("\nblink1mk3-firmware-v30x startup...\n");
   dbg_printf("toboot_runtime: count:%d model:%x\n",
