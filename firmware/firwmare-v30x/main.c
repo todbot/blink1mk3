@@ -528,10 +528,8 @@ static void off(void)
 static void startPlaying( void )
 {
   dbg_str("-startPlaying-");
-    playpos = playstart;
-    pattern_update_next = millis(); //uptime_millis; // millis(); // now;
-    //pattern_update_next = 0; // invalidate it so plays immediately
-    //memcpy( pattern, patternflash, sizeof(patternline_t)*PATT_MAX);
+  playpos = playstart;
+  pattern_update_next = millis(); //uptime_millis; // millis(); // now;
 }
 
 /**********************************************************************
@@ -598,7 +596,8 @@ static void updateLEDs(void)
               startPlaying();
             }
           }
-        } // inStartup
+          led_update_next = now;
+        } // end inStartup
 
     } // if led_update_next
 
@@ -633,7 +632,7 @@ static void updateLEDs(void)
             }
             
 #if 1       // print millis on each pattern line
-            dbg_printf("%ld %d %d %d\n",millis(),playpos, playstart,playend);
+            dbg_printf("\n%ld %d %d %d ",millis(),playpos, playstart,playend);
 #endif
 #if 0       // enabling this causes lag in pattern playing because of blocking LEUART writes
             dbg_printf("%ld patt %d rgb:%x %x %x t:%d l:%d\n", millis(),
@@ -834,11 +833,11 @@ int main()
   userDataLoad();
 
   #if DEBUG_STARTUP
-  dbg_printf("before loading startup params. size:%d bootmode:%d\n", sizeof(userdata_t), userData.startup_params.bootmode );
+  dbg_printf("before startup params. size:%d bootmode:%d\n", sizeof(userdata_t), userData.startup_params.bootmode );
   #endif
   
   // load up variables 
-  if( userData.startup_params.bootmode == BOOT_PLAY ) {
+  //if( userData.startup_params.bootmode == BOOT_PLAY ) {
     dbg_str("loading startup params\n");
     playstart = userData.startup_params.playstart;
     playend   = userData.startup_params.playend;
@@ -852,7 +851,7 @@ int main()
       serverdown_update_next = 500 + millis() + serverdown_millis; // FIXME: 500 because that's our startup delay
     }
     #endif
-  }    
+    //}    
   
   #if DEBUG_STARTUP
   #if 0  // debug: dump out loaded pattern
@@ -1213,8 +1212,6 @@ static void handleMessage(uint8_t reportId)
     reportToSend[5] = (uint8_t)(now >> 16);
     reportToSend[6] = (uint8_t)(now >> 8);
     reportToSend[7] = (uint8_t)(now >> 0);
-
-    //test2Flash(); // FIXME: this will get removed
   }
   //
   // Read User Note       format: { 1, 'f', noteid, 0, 0, 0, 0 }  
