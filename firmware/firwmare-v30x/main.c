@@ -109,7 +109,7 @@
 #define blink1_version_major '3'
 #define blink1_version_minor '2'
 
-#define DEBUG 0    // enable debug messages output via LEUART, see 'debug.h'
+#define DEBUG 1    // enable debug messages output via LEUART, see 'debug.h'
 #define DEBUG_STARTUP 0
 // define this to print out cmd+args in handleMessage()
 #define DEBUG_HANDLEMESSAGE 0
@@ -310,7 +310,7 @@ enum {
     PLAY_DIRECTLED = 3   // direct LED addressing (FIXME: this is dumb)
 };
 
-uint8_t playing; // playing values: as above enum
+uint8_t playing = PLAY_OFF; // playing values: as above enum
 
 bool doPatternWrite = false;
 
@@ -341,8 +341,8 @@ bool shouldRebootToBootloader = false;
 bool doNotesWrite = false;
 // Set when USB is properly setup by host PC
 bool usbHasBeenSetup = false;
-// In powerup sequence (defaults to true) 
-bool inStartup = true;
+// should powerup logic be done (must wait until chip & usb stabilize)
+bool doStartup = false;
 
 // For sending back HID Descriptor in setupCmd
 static void  *hidDescriptor = NULL;
@@ -578,9 +578,9 @@ static void updateLEDs(void)
         //   if bootmode is BOOT_PLAY:    play()
         //   if bootmode is BOOT_NORMAL:  do_nothing(), but if !usb, play()
         //
-        if( inStartup ) {
-          if( now > 500 ) { inStartup = false; } // after 500ms we are started
-          
+        if( now > 500 && now < 550 ) { doStartup = true; }
+        if( doStartup ) {
+          doStartup = false;
           uint8_t bmode = userData.startup_params.bootmode;
           if( bmode      == BOOT_OFF ) {
             dbg_str("BOOT_OFF\n");
@@ -595,20 +595,16 @@ static void updateLEDs(void)
           }
           else if( bmode == BOOT_NORMAL ) {
             dbg_str("BOOT_NORMAL\n");
-            if( !usbHasBeenSetup ) {
+            if( !usbHasBeenSetup ) { 
               if( !playing ) {
                 playing = PLAY_POWERUP;
                 startPlaying();
               }
             }
-            else { // usbHasBeenSetUp
-              // do nothing
-              playing = PLAY_OFF;
-            }
           }
-          led_update_next = now; // so first pattern timing is more accurate
-        } // end inStartup
-
+        } // doStartup
+        
+        
         // serverdown logic
         if( serverdown_millis != 0 ) {  // i.e. servermode has been turned on
           dbg_str("S");
@@ -767,18 +763,23 @@ static void makeSerialNumber()
 {
   uint64_t uniqid = SYSTEM_GetUnique(); // is 64-bit but we'll only use lower 32-bits
   uint8_t* uniqp = (uint8_t*) &uniqid;
-  
+
+  dbg_printf("serial: %lx %lx\n", (uint32_t)(uniqid>>32), (uint32_t)(uniqid & 0xffffffff));
+  dbg_printf("serial: %x %x %x %x  %x %x %x %x\n",
+             uniqp[0],uniqp[1],uniqp[2],uniqp[3],uniqp[4],uniqp[5],uniqp[6],uniqp[7]);
+
+  static const char table[] = "0123456789abcdef";
   // Hack to map ASCII hex digits to UTF-16LE
   // this way we don't need sprintf
-  static const char table[] = "0123456789abcdef";
   iSerialNumber[2]  = '3'; // mk3
-  iSerialNumber[4]  = table[ uniqp[0] >> 4 ];
-  iSerialNumber[6]  = table[ uniqp[0] & 0x0f ];
-  iSerialNumber[8]  = table[ uniqp[1] >> 4 ];
-  iSerialNumber[10] = table[ uniqp[1] & 0x0f ];
-  iSerialNumber[12] = table[ uniqp[2] >> 4 ];
-  iSerialNumber[14] = table[ uniqp[2] & 0x0f ];
-  iSerialNumber[16] = table[ uniqp[3] >> 4 ];
+  iSerialNumber[4]  = table[ uniqp[3] >> 4 ];
+  iSerialNumber[6]  = table[ uniqp[3] & 0x0f ];
+  iSerialNumber[8]  = table[ uniqp[2] >> 4 ];
+  iSerialNumber[10] = table[ uniqp[2] & 0x0f ];
+  iSerialNumber[12] = table[ uniqp[1] >> 4 ];
+  iSerialNumber[14] = table[ uniqp[1] & 0x0f ];
+  iSerialNumber[16] = table[ uniqp[0] >> 4 ];
+  
 }
 
 /**********************************************************************
@@ -851,20 +852,30 @@ int main()
   
   // load up variables 
   //if( userData.startup_params.bootmode == BOOT_PLAY ) {
-    dbg_str("loading startup params\n");
-    playstart = userData.startup_params.playstart;
-    playend   = userData.startup_params.playend;
-    playcount = userData.startup_params.playcount;
-    // serverdown variables
-    #if 0
-    serverdown_playstart = userData.startup_params.serverdown_playstart;
-    serverdown_playend   = userData.startup_params.serverdown_playend;
-    serverdown_millis    = userData.startup_params.serverdown_millis;
-    if( serverdown_millis ) {
-      serverdown_update_next = 500 + millis() + serverdown_millis; // FIXME: 500 because that's our startup delay
-    }
-    #endif
-    //}    
+  dbg_str("loading startup params\n");
+  playstart = userData.startup_params.playstart;
+  playend   = userData.startup_params.playend;
+  playcount = userData.startup_params.playcount;
+  // serverdown variables
+#if 0
+  serverdown_playstart = userData.startup_params.serverdown_playstart;
+  serverdown_playend   = userData.startup_params.serverdown_playend;
+  serverdown_millis    = userData.startup_params.serverdown_millis;
+  if( serverdown_millis ) {
+    serverdown_update_next = 500 + millis() + serverdown_millis; // FIXME: 500 because that's our startup delay
+  }
+#endif
+  //}
+
+  // set initial play state
+  //  if(        userData.startup_params.bootmode == BOOT_OFF ) {
+  //  playing = PLAY_OFF;
+  //} else if( userData.startup_params.bootmode == BOOT_NORMAL ) {
+  //  playing = PLAY_OFF;
+  //} else if( userData.startup_params.bootmode == BOOT_PLAY ) {
+  //  playing = PLAY_ON;
+  //}
+    
   
   #if DEBUG_STARTUP
   #if 0  // debug: dump out loaded pattern
@@ -876,7 +887,6 @@ int main()
                i, ctmp.r, ctmp.g, ctmp.b, ttmp, ledn);
   }
   #endif
-  
   // debug: dump out state variables
   dbg_printf("variable:      playstart/end/cnt: %d/%d/%d\n",
              playstart, playend, playcount);
@@ -894,6 +904,15 @@ int main()
   
   hidDescriptor = (void*) USBDESC_HidDescriptor; // FIXME
   
+  // standard blink1 startup white fadeout
+  for( uint8_t i=255; i>0; i-- ) {
+    SpinDelay(1);
+    uint8_t j = i>>4;      // not so bright, please
+    setLED(j,j,j, 0); // LED A
+    setLED(j,j,j, 1); // LED B
+    displayLEDs();
+  }
+
   // Enable the USB controller.
   // Remember, this consumes TIMER2 as per -DUSB_TIMER=USB_TIMER2 in Makefile
   // because TIMER0 & TIMER1 are already taken by the capacitive touch sensors.
@@ -910,14 +929,6 @@ int main()
   USBD_Connect();         
 #endif
 
-  // standard blink1 startup white fadeout
-  for( uint8_t i=255; i>0; i-- ) {
-    SpinDelay(1);
-    uint8_t j = i>>4;      // not so bright, please
-    setLED(j,j,j, 0); // LED A
-    setLED(j,j,j, 1); // LED B
-    displayLEDs();
-  }
   
   off();
   displayLEDs(); // why this here, to prime the system?
@@ -1218,6 +1229,8 @@ static void handleMessage(uint8_t reportId)
   // test test
   //
   else if( cmd == '!' ) {  // testtest
+    //uint64_t uniqid = System_GetUnique();
+    //uint8_t uniqidp = (uint8_t*)uniqid;
     uint32_t now = millis();
     reportToSend[2] = 0x55;
     reportToSend[3] = 0xAA;
@@ -1225,6 +1238,9 @@ static void handleMessage(uint8_t reportId)
     reportToSend[5] = (uint8_t)(now >> 16);
     reportToSend[6] = (uint8_t)(now >> 8);
     reportToSend[7] = (uint8_t)(now >> 0);
+    //reportToSend[8]  = (uint8_t)(uniqidp[0]);
+    //reportToSend[9]  = (uint8_t)(uniqidp[1]);
+    //reportToSend[10] = (uint8_t)(uniqidp[2]);
   }
   //
   // Read User Note       format: { 1, 'f', noteid, 0, 0, 0, 0 }  
@@ -1433,6 +1449,9 @@ void stateChange(USBD_State_TypeDef oldState, USBD_State_TypeDef newState)
   if (newState == USBD_STATE_CONFIGURED) {
     dbg_str(" USBconfigured ");
     usbHasBeenSetup = true;
+    if( userData.startup_params.bootmode == BOOT_NORMAL ) {
+      off();
+    }
     //GPIO_PinOutClear(gpioPortA, 0);
     //USBD_Read(EP_OUT, receiveBuffer, BUFFERSIZE, dataReceivedCallback);
   }
