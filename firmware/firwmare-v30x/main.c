@@ -109,7 +109,7 @@
 #define blink1_version_major '3'
 #define blink1_version_minor '2'
 
-#define DEBUG 0    // enable debug messages output via LEUART, see 'debug.h'
+#define DEBUG 1    // enable debug messages output via LEUART, see 'debug.h'
 #define DEBUG_STARTUP 0
 // define this to print out cmd+args in handleMessage()
 #define DEBUG_HANDLEMESSAGE 0
@@ -982,6 +982,7 @@ int main()
  *  - Set startup params      format: { 1, 'B', bootmode, playstart,playend,playcnt,0,0} (3)
  *  - Get startup params      format: { 1, 'b', 0,0,0, 0,0,0        } (3)
  *  - Server mode tickle      format: { 1, 'D', {1/0},th,tl, {1,0},sp, ep }
+ *  - Get chip unique id      format: { 2, 'U', 0 } (3)
  *
  * x Fade to RGB color        format: { 1, 'c', r,g,b,      th,tl, ledn }
  * x Set RGB color now        format: { 1, 'n', r,g,b,        0,0, ledn }
@@ -1235,11 +1236,28 @@ static void handleMessage(uint8_t reportId)
     }
   }
   //
+  // Get chip unique id    format: { 2, 'U', ... }
+  // Return 8 bytes of unique id
+  else if( cmd == 'U' && rId == 2 ) {
+    dbg_printf("getId");
+    uint64_t id = SYSTEM_GetUnique();
+    uint8_t* idp = (uint8_t*)&id;
+    //reportToSend[0] is report id
+    //reportToSend[1] is cmd ('U' in this case)
+    reportToSend[2]  = idp[0];
+    reportToSend[3]  = idp[1];
+    reportToSend[4]  = idp[2];
+    reportToSend[5]  = idp[3];
+    reportToSend[6]  = idp[4];
+    reportToSend[7]  = idp[5];
+    reportToSend[8]  = idp[6];
+    reportToSend[9]  = idp[7];
+    reportToSend[10] = 0;
+  }
+  //
   // test test
   //
   else if( cmd == '!' ) {  // testtest
-    //uint64_t uniqid = System_GetUnique();
-    //uint8_t uniqidp = (uint8_t*)uniqid;
     uint32_t now = millis();
     reportToSend[2] = 0x55;
     reportToSend[3] = 0xAA;
@@ -1247,9 +1265,6 @@ static void handleMessage(uint8_t reportId)
     reportToSend[5] = (uint8_t)(now >> 16);
     reportToSend[6] = (uint8_t)(now >> 8);
     reportToSend[7] = (uint8_t)(now >> 0);
-    //reportToSend[8]  = (uint8_t)(uniqidp[0]);
-    //reportToSend[9]  = (uint8_t)(uniqidp[1]);
-    //reportToSend[10] = (uint8_t)(uniqidp[2]);
   }
   //
   // Read User Note       format: { 1, 'f', noteid, 0, 0, 0, 0 }  
