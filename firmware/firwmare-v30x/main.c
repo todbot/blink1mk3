@@ -109,7 +109,7 @@
 #define blink1_version_major '3'
 #define blink1_version_minor '2'
 
-#define DEBUG 1    // enable debug messages output via LEUART, see 'debug.h'
+#define DEBUG 0    // enable debug messages output via LEUART, see 'debug.h'
 #define DEBUG_STARTUP 0
 // define this to print out cmd+args in handleMessage()
 #define DEBUG_HANDLEMESSAGE 0
@@ -761,19 +761,26 @@ static void updateMisc()
  **********************************************************************/
 static void makeSerialNumber()
 {
+  // https://www.silabs.com/community/mcu/32-bit/knowledge-base.entry.html/2014/05/14/efm32_unique_id-oLsM
+  // https://www.silabs.com/community/mcu/32-bit/knowledge-base.entry.html/2017/07/04/find_efm32_deviceun-3JpN
   uint64_t uniqid = SYSTEM_GetUnique(); // is 64-bit but we'll only use lower 32-bits
   uint8_t* uniqp = (uint8_t*) &uniqid;
+  // need to hash this 64-bit number (16 hex chars) down to 32-bits (7 hex chars)
+  // maybe something like: http://www.cse.yorku.ca/~oz/hash.html
+  uint16_t uniqh = djb_hash(uniqp,8);
 
   dbg_printf("serial: %lx %lx\n", (uint32_t)(uniqid>>32), (uint32_t)(uniqid & 0xffffffff));
   dbg_printf("serial: %x %x %x %x  %x %x %x %x\n",
              uniqp[0],uniqp[1],uniqp[2],uniqp[3],uniqp[4],uniqp[5],uniqp[6],uniqp[7]);
+  dbg_printf("serial: %x\n",uniqh);
 
+  uniqp = (uint8_t*)&uniqh;
   static const char table[] = "0123456789abcdef";
   // Hack to map ASCII hex digits to UTF-16LE
   // this way we don't need sprintf
-  iSerialNumber[2]  = '3'; // mk3
-  iSerialNumber[4]  = table[ uniqp[3] >> 4 ];
-  iSerialNumber[6]  = table[ uniqp[3] & 0x0f ];
+  iSerialNumber[2]  = '3';                      // mk3
+  iSerialNumber[4]  = table[ uniqp[3] >> 4 ];   // high nibble
+  iSerialNumber[6]  = table[ uniqp[3] & 0x0f ]; // low  nibble
   iSerialNumber[8]  = table[ uniqp[2] >> 4 ];
   iSerialNumber[10] = table[ uniqp[2] & 0x0f ];
   iSerialNumber[12] = table[ uniqp[1] >> 4 ];
@@ -818,6 +825,8 @@ int main()
     while (1);
   }
 
+  SpinDelay(100); // wait 100ms to let power stabilize
+  
   dbg_setup();  // sets up LEUART if DEBUG is set
 
   dbg_str("\nblink1mk3-firmware-v30x startup...\n");
