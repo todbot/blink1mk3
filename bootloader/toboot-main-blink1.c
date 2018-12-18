@@ -23,7 +23,7 @@
 #ifdef BOARD_TYPE_BLINK1
 #include "mcu_too.h"
 #include "ws2812_spi.h"
-rgb_t leds[3] = { {99,0,33}, {33,0,99}, {99,0,33} };
+rgb_t leds[3] = { {66,0,11}, {11,0,66}, {66,0,11} };
 volatile bool ltoggle = false;  // FIXME: do this without another variable?
 #endif
 

@@ -109,7 +109,7 @@
 #define blink1_version_major '3'
 #define blink1_version_minor '2'
 
-#define DEBUG 1    // enable debug messages output via LEUART, see 'debug.h'
+#define DEBUG 0    // enable debug messages output via LEUART, see 'debug.h'
 #define DEBUG_STARTUP 0
 // define this to print out cmd+args in handleMessage()
 #define DEBUG_HANDLEMESSAGE 0
