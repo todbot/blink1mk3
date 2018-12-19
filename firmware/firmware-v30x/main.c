@@ -705,10 +705,10 @@ static void updateMisc()
     //   if bootmode is BOOT_PLAY:    play()
     //   if bootmode is BOOT_NORMAL:  do_nothing(), but if !usb, play()
     //
-    if( now > 500 && now < 600 ) { doStartup = true; }
+    if( now > 1000 ) { doStartup = true; }
     if( doStartup ) {
-      dbg_printf("-doStartup:%ld-",now);
       doStartup = false;
+      dbg_printf("-doStartup:%ld-",now);
       uint8_t bmode = userData.startup_params.bootmode;
       if( bmode      == BOOT_OFF ) {
         dbg_str("BOOT_OFF\n");
