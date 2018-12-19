@@ -320,7 +320,7 @@ uint16_t ttmp;   // temp time holder
 uint8_t ledn;    // temp ledn holder
 
 // The uptime in milliseconds, maintained by the SysTick timer.
-volatile uint32_t uptime_millis;
+volatile uint32_t uptime_millis=0;
 
 // next time led_update should run
 const uint32_t led_update_millis = 10;  // tick msec
@@ -534,7 +534,7 @@ static void startPlaying( void )
 {
   dbg_str("-startPlaying-");
   playpos = playstart;
-  pattern_update_next = millis(); //uptime_millis; // millis(); // now;
+  pattern_update_next = millis(); //uptime_millis; // now;
 }
 
 /**********************************************************************
@@ -562,52 +562,18 @@ void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n)
  **********************************************************************/
 static void updateLEDs(void)
 {
-    uint32_t now = uptime_millis;
+  uint32_t now = millis(); // uptime_millis;
     
     // update LEDs every led_update_millis
     if( (long)(now - led_update_next) > 0 ) {
         led_update_next += led_update_millis;
 
         rgb_updateCurrent(); // playing=3 => direct LED addressing (not anymore)
-        displayLEDs();
-
-        // startup processing logic
-        // pseudo code:
-        // if we've just been powered up
-        //   if bootmode is BOOT_OFF:     off, no playing
-        //   if bootmode is BOOT_PLAY:    play()
-        //   if bootmode is BOOT_NORMAL:  do_nothing(), but if !usb, play()
-        //
-        if( now > 500 && now < 550 ) { doStartup = true; }
-        if( doStartup ) {
-          doStartup = false;
-          uint8_t bmode = userData.startup_params.bootmode;
-          if( bmode      == BOOT_OFF ) {
-            dbg_str("BOOT_OFF\n");
-            playing = PLAY_OFF;
-          }
-          else if( bmode == BOOT_PLAY ) {
-            dbg_str("BOOT_PLAY\n");
-            if( !playing ) {
-              playing = PLAY_ON;
-              startPlaying();
-            }
-          }
-          else if( bmode == BOOT_NORMAL ) {
-            dbg_str("BOOT_NORMAL\n");
-            if( !usbHasBeenSetup ) { 
-              if( !playing ) {
-                playing = PLAY_POWERUP;
-                startPlaying();
-              }
-            }
-          }
-        } // doStartup
-        
+        displayLEDs();      
         
         // serverdown logic
         if( serverdown_millis != 0 ) {  // i.e. servermode has been turned on
-          dbg_str("S");
+          dbg_str("*S*");
           if( (long)(now - serverdown_update_next) > 0 ) {
             serverdown_millis = 0;  // disable this check
             playing = PLAY_ON;
@@ -639,13 +605,13 @@ static void updateLEDs(void)
               hsbtorgb( h,s,v, &ctmp.r, &ctmp.g, &ctmp.b );  // NOTE: writes to ctmp.{r,g,b}
             }
             
-#if 1       // print millis on each pattern line
-            dbg_printf("\n%ld %d %d %d %d ",millis(),playpos, playstart,playend,playcount);
+#if 0       // print millis on each pattern line
+            dbg_printf("\n%ld %d %d %d %d %d ",millis(),playpos, playstart,playend,playcount,ttmp);
 #endif
 #if 0       // enabling this causes lag in pattern playing because of blocking LEUART writes
-            dbg_printf("%ld patt %d rgb:%x %x %x t:%d l:%d\n", millis(),
+            dbg_printf("\n%ld patt %d rgb:%x %x %x t:%d l:%d ", millis(),
                        playpos, ctmp.r, ctmp.g, ctmp.b, ttmp, ledn);
-#endif            
+#endif
             if( ttmp == 0 && ctmp.r == 0 && ctmp.g == 0 && ctmp.b == 0) {
                 // skip lines set to zero
             } else {
@@ -713,15 +679,15 @@ static void checkSWDPins()
  **********************************************************************/
 static void updateMisc()
 {
-  if( (uptime_millis - last_misc_millis) > 250 ) {  // only run this every 250 msecs
-    last_misc_millis = millis(); //uptime_millis;
+  uint32_t now = millis(); //uptime_millis;
+  
+  if( (now - last_misc_millis) > 250 ) {  // only run this every 250 msecs
+    last_misc_millis = now; //uptime_millis;
     //write_char('.');  //write_char('0'+usbState);
     // print out heartbeats that are also our USB state:
     // '.' == connected to computer
     // ':' == powered but no computer
-    // a number is another USBD_State_TypeDef
-    //write_char((usbState==USBD_STATE_CONFIGURED) ? '.' : (usbState==USBD_STATE_DEFAULT) ? ':': 0+usbState);
-    //write_char((usbHasBeenSetup) ? '.' : ':');
+    // usbHasBeenSetup set in USB callback
     dbg_ch((usbHasBeenSetup) ? '.' : ':');
 
     if( shouldRebootToBootloader ) {
@@ -731,7 +697,46 @@ static void updateMisc()
     if( userData.startup_params.bootloaderlock ) {
       checkSWDPins();
     }
-  }
+    
+    // startup processing logic
+    // pseudo code:
+    // if we've just been powered up
+    //   if bootmode is BOOT_OFF:     off, no playing
+    //   if bootmode is BOOT_PLAY:    play()
+    //   if bootmode is BOOT_NORMAL:  do_nothing(), but if !usb, play()
+    //
+    if( now > 500 && now < 600 ) { doStartup = true; }
+    if( doStartup ) {
+      dbg_printf("-doStartup:%ld-",now);
+      doStartup = false;
+      uint8_t bmode = userData.startup_params.bootmode;
+      if( bmode      == BOOT_OFF ) {
+        dbg_str("BOOT_OFF\n");
+        playing = PLAY_OFF;
+      }
+      else if( bmode == BOOT_PLAY ) {
+        dbg_str("BOOT_PLAY\n");
+        if( !playing ) {
+          playing = PLAY_ON;
+          startPlaying();
+        }
+      }
+      else if( bmode == BOOT_NORMAL ) {
+        dbg_str("BOOT_NORMAL\n");
+        if( !usbHasBeenSetup ) { 
+          if( !playing ) {
+            playing = PLAY_POWERUP;
+            startPlaying();
+          }
+        }
+      }
+    } // doStartup
+    
+  } // last_misc_millis
+  
+  //
+  // do these operations immediately
+  //
   
   if( doNotesWrite ) {
     doNotesWrite = false;
