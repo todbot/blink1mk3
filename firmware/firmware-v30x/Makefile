@@ -165,14 +165,14 @@ program-dfu:
 	dfu-util -v --device 27B8:01EE --download $(TARGET).dfu
 
 # save the entire memory contents to a file
-savebin:
+savefull:
 	echo " power on \n savebin $(TARGET)-full.bin,0x0,0xffff \n exit \n" > jlink-tmp.txt
 	jlinkexe -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
 	rm jlink-tmp.txt
 
 # program the entire memory contents from a file
-progbin:
-	echo " power on \n loadbin $(TARGET)-full.bin,0x0 \n go \n power off \n exit \n" > jlink-tmp.txt
+progfull:
+	echo " power on \n erase \n loadbin $(TARGET)-full.bin,0x0 \n go \n power off \n exit \n" > jlink-tmp.txt
 	jlinkexe -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
 	rm jlink-tmp.txt
 
