@@ -14,7 +14,7 @@ This repo contains:
 Other repositories of interest:
 - https://github.com/todbot/blink1-tool - command-line tools and C-library to control blink(1)
 - https://github.com/todbot/Blink1Control2 - For a Mac/Windows/Linux GUI
-- https:/github.com/todbot/blink1 -  For other blink(1) tools
+- https://github.com/todbot/blink1 -  For other blink(1) tools
 
 
 
