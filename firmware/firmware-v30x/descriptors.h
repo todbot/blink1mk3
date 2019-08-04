@@ -195,7 +195,9 @@ static const uint8_t configDesc[] SL_ATTRIBUTE_ALIGN(4) =
   1,                                    /* bNumInterfaces       */
   1,                                    /* bConfigurationValue  (index of this configuration) */
   0,                                    /* iConfiguration       (configuration string index) */
-  0x80,                                 /* bmAttrib */  // 0x80 = buspowered | 0x40 = self-powered = 0xc0
+  //0x80,                                 /* bmAttrib */  // 0x80 = buspowered | 0x40 = self-powered = 0xc0
+  CONFIG_DESC_BM_RESERVED_D7 |    // bmAttrib: Self powered
+  CONFIG_DESC_BM_SELFPOWERED,  
   CONFIG_DESC_MAXPOWER_mA( 100 ),       /* bMaxPower: 100 mA    */
 
   /*** Interface descriptor ***/
