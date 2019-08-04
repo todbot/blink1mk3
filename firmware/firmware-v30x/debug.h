@@ -9,8 +9,9 @@
 char dbgstr[50];
 
 // for tiny printf
-void myputc ( void* p, char c) {
-  (void)p;  write_char(c);
+int myputc ( void* p, char c) {
+  (void)p;
+  return write_char(c);
 }
 
 // a debug printf out the leuart
