@@ -10,7 +10,7 @@
  *  - Check blink1_version_ defines
  *  - Check USB version strings in "descriptors.h"
  *  - Verify latest bootloader is installed
- * 
+ *
  * Production firmware:
  * - v302 is first production firmware
  *
@@ -32,7 +32,7 @@
  * - cleaned up debug printing, increased dbgstr size from 30 to 50 bytes
  *
  * Differences from blink1mk3-test1:
- * - responds correctly to ReportId 2 (64-bytes), testable with "blink1-tool -i 2 --testtest" 
+ * - responds correctly to ReportId 2 (64-bytes), testable with "blink1-tool -i 2 --testtest"
  * - code reformatted heavily to pull ws2812 driver and color_funcs into separate files
  * - code works on Tomu-class boards
  *
@@ -42,10 +42,10 @@
 /*
  * Flash Memory Layout
  * -------------
- * 0x0000 \ 
+ * 0x0000 \
  * ...     |- DFU bootlaoder (16 kB)
  * 0x3FFF /
- * 0x4000 \ 
+ * 0x4000 \
  * ..      -- blink1 program code (46 kB == 64kB - 1kB - 1kB - 16kB)
  * 0xF7FF /
  * 0xF800 \
@@ -54,7 +54,7 @@
  * 0xFC00 \
  * ...     -- User-specified color patterns (1 kB)
  * 0xFFFF /
- * 
+ *
  * See "blink1mk3.ld" for details
  */
 
@@ -74,9 +74,9 @@
  * 13 - AVDD_2     - VCC 3v3
  * 14 - DECOUPLE   - decouple cap
  * 15 - USB VREGI  - USB +5V
- * 16 - USB_VREGO  - VCC 3v3 
+ * 16 - USB_VREGO  - VCC 3v3
  * 17 - PC14       - USB D-
- * 18 - PC15       - USB D+ 
+ * 18 - PC15       - USB D+
  * 19 - PF0        - SWDCLK
  * 20 - PF1        - SWDIO
  * 21 - PF2        - n/c
@@ -107,7 +107,7 @@
 #include <stdbool.h>
 
 #define blink1_version_major '3'
-#define blink1_version_minor '2'
+#define blink1_version_minor '3'
 
 #define DEBUG 0    // enable debug messages output via LEUART, see 'debug.h'
 #define DEBUG_STARTUP 0
@@ -168,7 +168,7 @@ enum {
 
 // layout of the startup params bundle
 // (v206+ stored a smaller startup params in last patternline)
-typedef struct { 
+typedef struct {
   uint8_t bootmode;  // ledn, bootmode_t enum above
   uint8_t playstart; // r from v206 mk2
   uint8_t playend;   // g
@@ -207,7 +207,7 @@ typedef struct {
  * Note size = 50
  * Note count = 20
  * Total size = 1000 < FLASH_PAGE_SIZE = 1024
- * .userNotesFlashSection is in flash at address 0xf800 (64k - (2*1k)) 
+ * .userNotesFlashSection is in flash at address 0xf800 (64k - (2*1k))
  */
 #define NOTE_SIZE 50
 #define NOTE_COUNT 20
@@ -230,7 +230,7 @@ typedef struct {
  *
  * FLASH_PAGE_SIZE = 1024 (Gecko_SDK/platform/Device/SiliconLabs/EFM32HG/Include/efm32hg309f64.h)
  * FLASH_SIZE = 65536 (64k)
- * .userFlashSection is in flash at address 0xfc00 (64k - (1*1k)) 
+ * .userFlashSection is in flash at address 0xfc00 (64k - (1*1k))
  */
 //uint32_t *patterFlashAddress = (uint32_t *)(FLASH_SIZE - (2*FLASH_PAGE_SIZE));
 
@@ -249,7 +249,7 @@ const userdata_t userFlash = {
     .serverdown_playend = 0,
     .serverdown_millis = 0,
   },
-  .pattern = 
+  .pattern =
   {
     //    R     G     B    fade ledn
     { { 0xff, 0x00, 0x00 },  50, 1 }, // 0  red A
@@ -294,7 +294,7 @@ SL_ALIGN(4)
 userdata_t userData SL_ATTRIBUTE_ALIGN(4);
 
 uint8_t playpos   = 0; // current play position
-// 
+//
 uint8_t playstart = 0; // start play position
 uint8_t playend   = PATT_MAX; // end play position
 uint8_t playcount = 0; // number of times to play loop, or 0=infinite
@@ -303,7 +303,7 @@ uint8_t playcount = 0; // number of times to play loop, or 0=infinite
 //#define playcount userData.startup_params.playcount
 
 // play modes, valid values for "playing"
-enum { 
+enum {
     PLAY_OFF       = 0,  // off
     PLAY_ON        = 1,  // normal playing pattern
     PLAY_POWERUP   = 2,  // playing from a powerup
@@ -331,7 +331,7 @@ uint32_t pattern_update_next;
 uint16_t serverdown_millis = 0;
 uint32_t serverdown_update_next;
 uint8_t  serverdown_playstart = 0;        // start play position for serverdown
-uint8_t  serverdown_playend   = PATT_MAX; // end play position for serverdown 
+uint8_t  serverdown_playend   = PATT_MAX; // end play position for serverdown
 
 uint32_t last_misc_millis;
 
@@ -353,7 +353,7 @@ static void  *hidDescriptor = NULL;
 SL_ALIGN(4)
 static uint8_t  inbuf[REPORT2_COUNT] SL_ATTRIBUTE_ALIGN(4);
 
-// The USB report packet to send to the host 
+// The USB report packet to send to the host
 // generally it's a copy of the last report received, then modified
 SL_ALIGN(4)
 static uint8_t reportToSend[REPORT2_COUNT] SL_ATTRIBUTE_ALIGN(4);
@@ -365,14 +365,14 @@ void stateChange(USBD_State_TypeDef oldState, USBD_State_TypeDef newState);
 /* Define callbacks that are called by the USB stack on different events. */
 static const USBD_Callbacks_TypeDef callbacks =
 {
-  .usbReset       = NULL,         // Called whenever USB reset signalling is detected  
-  .usbStateChange = stateChange,  // Called whenever the device change state.  
-  .setupCmd       = setupCmd,     // Called on each setup request received from host. 
-  .isSelfPowered  = NULL,         // Called when the device stack needs to query if the device is currently self- or bus-powered. 
-  .sofInt         = NULL          // Called at each SOF interrupt. If NULL, device stack will not enable the SOF interrupt. 
+  .usbReset       = NULL,         // Called whenever USB reset signalling is detected
+  .usbStateChange = stateChange,  // Called whenever the device change state.
+  .setupCmd       = setupCmd,     // Called on each setup request received from host.
+  .isSelfPowered  = NULL,         // Called when the device stack needs to query if the device is currently self- or bus-powered.
+  .sofInt         = NULL          // Called at each SOF interrupt. If NULL, device stack will not enable the SOF interrupt.
 };
 
-/* Fill the init struct. This struct is passed to USBD_Init() in order 
+/* Fill the init struct. This struct is passed to USBD_Init() in order
  * to initialize the USB Stack */
 static const USBD_Init_TypeDef initstruct =
 {
@@ -389,8 +389,8 @@ static const USBD_Init_TypeDef initstruct =
 /* This functions is injected into the Interrupt Vector Table, and will be
  * called whenever the SysTick timer fires (whose interval is configured inside
  * main() further below).
- * It provides the equivalent of "millis()" in the variable "uptime_millis", 
- * but it does roll-over 
+ * It provides the equivalent of "millis()" in the variable "uptime_millis",
+ * but it does roll-over
  * It must be called "SysTick_Handler"
  */
 void SysTick_Handler() {
@@ -399,18 +399,18 @@ void SysTick_Handler() {
 // ease-of-use function because I'm used to Arduino
 #define millis() (uptime_millis)
 
-/* 
+/*
  * simple delay() -- don't use this normally because it spinlocks the CPU
  */
 static void SpinDelay(uint32_t millis) {
   // Calculate the time at which we need to finish "sleeping".
-  uint32_t sleep_until = uptime_millis + millis; 
+  uint32_t sleep_until = uptime_millis + millis;
   // Spin until the requested time has passed.
   while (uptime_millis < sleep_until);
 }
 
 /**********************************************************************
- * Set Toboot magic value to force bootloader and reset 
+ * Set Toboot magic value to force bootloader and reset
  **********************************************************************/
 static void rebootToBootloader()
 {
@@ -420,11 +420,11 @@ static void rebootToBootloader()
   setLED(33,0,99, 1); // LED B
   displayLEDs();
   SpinDelay(100);
-  
+
   // set magic value to force bootloader
   toboot_runtime.magic = TOBOOT_FORCE_ENTRY_MAGIC;
   setLEDsAll(0,0,0);     // Turn off all LEDs
-  displayLEDs();        
+  displayLEDs();
   USBD_Disconnect();     // Disconnect nicely from USB
   USBTIMER_DelayMs(100); // Wait a bit
   NVIC_SystemReset();    // Reset
@@ -433,13 +433,13 @@ static void rebootToBootloader()
 // --------------------------------------------------------
 
 /*********************************
- * Save current RAM pattern & startup params to flash 
+ * Save current RAM pattern & startup params to flash
  *********************************/
 static void userDataSave()
 {
   MSC_Init();
   MSC_ErasePage((uint32_t*)&userFlash); // must erase first
-  MSC_WriteWord((uint32_t*)&userFlash, &userData, FLASH_PAGE_SIZE); 
+  MSC_WriteWord((uint32_t*)&userFlash, &userData, FLASH_PAGE_SIZE);
   MSC_Deinit();
 }
 
@@ -558,19 +558,19 @@ void setLED(uint8_t r, uint8_t g, uint8_t b, uint8_t n)
  * - controls sequencing of a light pattern, if playing
  * - triggers pattern playing on USB disconnect
  * - handles serverdown logic
- * - handles startup behavior logic 
+ * - handles startup behavior logic
  **********************************************************************/
 static void updateLEDs(void)
 {
   uint32_t now = millis(); // uptime_millis;
-    
+
     // update LEDs every led_update_millis
     if( (long)(now - led_update_next) > 0 ) {
         led_update_next += led_update_millis;
 
         rgb_updateCurrent(); // playing=3 => direct LED addressing (not anymore)
-        displayLEDs();      
-        
+        displayLEDs();
+
         // serverdown logic
         if( serverdown_millis != 0 ) {  // i.e. servermode has been turned on
           dbg_str("*S*");
@@ -604,7 +604,7 @@ static void updateLEDs(void)
               uint8_t v = ctmp.b;
               hsbtorgb( h,s,v, &ctmp.r, &ctmp.g, &ctmp.b );  // NOTE: writes to ctmp.{r,g,b}
             }
-            
+
 #if 0       // print millis on each pattern line
             dbg_printf("\n%ld %d %d %d %d %d ",millis(),playpos, playstart,playend,playcount,ttmp);
 #endif
@@ -631,7 +631,7 @@ static void updateLEDs(void)
             pattern_update_next += ttmp*10;  // okay if ttmp is zero
         }
     } // playing
-    
+
 }
 
 // ------------------------------------------------------------------------
@@ -654,13 +654,13 @@ static void checkSWDPins()
   // SWCLK is output, SWDIO is input
   GPIO_DbgSWDIOEnable(false);  // turn OFF SWD (GPIO->ROUTE = 0)
   // begin: do this part as fast as possible
-  GPIO_PinModeSet(SWD_PORT, SWCLK_PIN, gpioModePushPull, 0); // set LOW 
+  GPIO_PinModeSet(SWD_PORT, SWCLK_PIN, gpioModePushPull, 0); // set LOW
   GPIO_PinModeSet(SWD_PORT, SWDIO_PIN, gpioModeInputPull, 1); // pull-up
   //GPIO_PinOutClear(SWD_PORT, SWCLK_PIN); // set SWCLK low
   int v = GPIO_PinInGet(SWD_PORT, SWDIO_PIN); // read SWDIO
   // end: do this part as fast as possible
   GPIO_DbgSWDIOEnable(true);   // turn ON SWD  (GPIO->ROUTE = 0)
-  
+
   if( v==0 ) { // pin connected
     bootloadPinTest += 5;
     if( bootloadPinTest > 10 ) {
@@ -680,7 +680,7 @@ static void checkSWDPins()
 static void updateMisc()
 {
   uint32_t now = millis(); //uptime_millis;
-  
+
   if( (now - last_misc_millis) > 250 ) {  // only run this every 250 msecs
     last_misc_millis = now; //uptime_millis;
     //write_char('.');  //write_char('0'+usbState);
@@ -693,11 +693,11 @@ static void updateMisc()
     if( shouldRebootToBootloader ) {
       rebootToBootloader();  // and now we die
     }
-    
+
     if( userData.startup_params.bootloaderlock ) {
       checkSWDPins();
     }
-    
+
     // startup processing logic
     // pseudo code:
     // if we've just been powered up
@@ -723,7 +723,7 @@ static void updateMisc()
       }
       else if( bmode == BOOT_NORMAL ) {
         dbg_str("BOOT_NORMAL\n");
-        if( !usbHasBeenSetup ) { 
+        if( !usbHasBeenSetup ) {
           if( !playing ) {
             playing = PLAY_POWERUP;
             startPlaying();
@@ -731,20 +731,20 @@ static void updateMisc()
         }
       }
     } // doStartup
-    
+
   } // last_misc_millis
-  
+
   //
   // do these operations immediately
   //
-  
+
   if( doNotesWrite ) {
     doNotesWrite = false;
     dbg_str("writing userNotes...");
     notesSave();
     dbg_str("wrote userNotes");
   }
-  
+
   if( doPatternWrite ) {
     doPatternWrite = false;
     userDataSave();
@@ -791,7 +791,7 @@ static void makeSerialNumber()
   iSerialNumber[12] = table[ uniqp[1] >> 4 ];
   iSerialNumber[14] = table[ uniqp[1] & 0x0f ];
   iSerialNumber[16] = table[ uniqp[0] >> 4 ];
-  
+
 }
 
 /**********************************************************************
@@ -802,14 +802,14 @@ int main()
   // Runs the Silicon Labs chip initialisation stuff, that also deals with
   // errata (implements workarounds, etc).
   CHIP_Init();
-  
+
   // Disable the watchdog that the bootloader started.
   WDOG->CTRL = 0;
-  
-  //CMU_ClockEnable(cmuClock_DMA, true);  
+
+  //CMU_ClockEnable(cmuClock_DMA, true);
   // USART is a HFPERCLK peripheral. Enable HFPERCLK domain and USART0.
-  CMU_ClockEnable(cmuClock_HFPER, true);  
-  CMU_ClockEnable(cmuClock_USART0, true);  
+  CMU_ClockEnable(cmuClock_HFPER, true);
+  CMU_ClockEnable(cmuClock_USART0, true);
   // Switch on the clock for GPIO. Even though there's no immediately obvious
   // timing stuff going on beyond the SysTick below, it still needs to be
   // enabled for the GPIO to work.
@@ -831,7 +831,7 @@ int main()
   }
 
   SpinDelay(100); // wait 100ms to let power stabilize
-  
+
   dbg_setup();  // sets up LEUART if DEBUG is set
 
   dbg_str("\nblink1mk3-firmware-v30x startup...\n");
@@ -857,14 +857,14 @@ int main()
   dbg_printf("CMU_HFCORECLKEN0 : %lx\n", CMU->HFCORECLKEN0 ); // 0x0004
   dbg_printf("CMU_HFPERCLKEN0  : %lx\n", CMU->HFPERCLKEN0 );  // 0x016b
 #endif
-  
+
   userDataLoad();
 
   #if DEBUG_STARTUP
   dbg_printf("before startup params. size:%d bootmode:%d\n", sizeof(userdata_t), userData.startup_params.bootmode );
   #endif
-  
-  // load up variables 
+
+  // load up variables
   //if( userData.startup_params.bootmode == BOOT_PLAY ) {
   dbg_str("loading startup params\n");
   playstart = userData.startup_params.playstart;
@@ -889,8 +889,8 @@ int main()
   //} else if( userData.startup_params.bootmode == BOOT_PLAY ) {
   //  playing = PLAY_ON;
   //}
-    
-  
+
+
   #if DEBUG_STARTUP
   #if 0  // debug: dump out loaded pattern
   for( int i=0; i<8; i++) { // should be PATT_MAX
@@ -911,13 +911,13 @@ int main()
              serverdown_playstart, serverdown_playend, serverdown_millis);
   #endif
 
-  
+
   notesLoadAll();
-  
+
   makeSerialNumber();  // Make USB serial number from chip unique Id
-  
+
   hidDescriptor = (void*) USBDESC_HidDescriptor; // FIXME
-  
+
   // standard blink1 startup white fadeout
   for( uint8_t i=255; i>0; i-- ) {
     SpinDelay(1);
@@ -938,23 +938,23 @@ int main()
 #if 0
   // When using a debugger it is practical to uncomment the following three
   // lines to force host to re-enumerate the device.
-  USBD_Disconnect();      
-  USBTIMER_DelayMs(1000); 
-  USBD_Connect();         
+  USBD_Disconnect();
+  USBTIMER_DelayMs(1000);
+  USBD_Connect();
 #endif
 
-  
+
   off();
   displayLEDs(); // why this here, to prime the system?
 
-  // main loop 
+  // main loop
   while(1) {
 
     updateLEDs();
     updateMisc();
-    
+
   }
-  
+
 }
 
 /**********************************************************************
@@ -999,11 +999,11 @@ int main()
  *********************************************************************/
 static void handleMessage(uint8_t reportId)
 {
-#if DEBUG_HANDLEMESSAGE 
+#if DEBUG_HANDLEMESSAGE
   dbg_printf("%d:%x,%x,%x,%x,%x,%x,%x,%x\n", reportId,
           inbuf[0],inbuf[1],inbuf[2],inbuf[3],inbuf[4],inbuf[5],inbuf[6],inbuf[7] );
 #endif
-  
+
   // pre-load response with request, contains report id
   uint8_t count = (reportId==REPORT_ID) ? REPORT_COUNT : REPORT2_COUNT;
   memcpy( (void*)reportToSend, (void*)inbuf, count);
@@ -1039,7 +1039,7 @@ static void handleMessage(uint8_t reportId)
     else {
       rgb_setDest( &c, 0, 0 );
       rgb_setCurr( &c );  // FIXME: no LED arg
-    }    
+    }
   }
   //
   //  Read current color        - { 1,'r', 0,0,0,   0,0, 0}
@@ -1057,7 +1057,7 @@ static void handleMessage(uint8_t reportId)
   //
   //  Play/Pause, with pos     - { 1, 'p', {1/0},startpos,endpos,  0,0, 0 }
   //
-  else if( cmd == 'p' ) { 
+  else if( cmd == 'p' ) {
     playing   = inbuf[2];
     playstart = inbuf[3];
     playend   = inbuf[4];
@@ -1116,14 +1116,14 @@ static void handleMessage(uint8_t reportId)
         inbuf[3] == 0xEF &&
         inbuf[4] == 0xCA &&
         inbuf[5] == 0xFE ) {
-      doPatternWrite = true; 
+      doPatternWrite = true;
       // we write in main loop, not in this callback
     }
   }
   //
   // Set ledn : { 1, 'l', n, 0...}
   //
-  else if( cmd == 'l' ) { 
+  else if( cmd == 'l' ) {
     ledn = inbuf[2];
   }
   //
@@ -1155,20 +1155,20 @@ static void handleMessage(uint8_t reportId)
     }
   }
   //
-  // Set startup parameters     format: {2, 'B', bootmode, playstart, playend, playcount, 0,0} 
+  // Set startup parameters     format: {2, 'B', bootmode, playstart, playend, playcount, 0,0}
   //
-  else if( cmd == 'B' ) { 
+  else if( cmd == 'B' ) {
     userData.startup_params.bootmode  = inbuf[2]; // ledn (from v206+)
     userData.startup_params.playstart = inbuf[3]; // r
     userData.startup_params.playend   = inbuf[4]; // g
     userData.startup_params.playcount = inbuf[5]; // b
-#if 0 
+#if 0
     // serverdown variables
-    userData.startup_params.serverdown_playstart  = inbuf[6]; 
-    userData.startup_params.serverdown_playend    = inbuf[7]; 
-    userData.startup_params.serverdown_millis     = (inbuf[8] << 8) | inbuf[9]; 
+    userData.startup_params.serverdown_playstart  = inbuf[6];
+    userData.startup_params.serverdown_playend    = inbuf[7];
+    userData.startup_params.serverdown_millis     = (inbuf[8] << 8) | inbuf[9];
 #endif
-    
+
     // fixup playend, copied from 'p'lay/pause
     // handles case were playend is badly-defined
     // at sets to it be end+1 not end, because of dim historical for-loop reasons
@@ -1218,19 +1218,19 @@ static void handleMessage(uint8_t reportId)
         reportToSend[5] = 'E';
         reportToSend[6] = 'D';
       }
-      else { 
+      else {
         shouldRebootToBootloader = true;
         reportToSend[2] = 'O'; // send acknowledge
         reportToSend[3] = 'B';
         reportToSend[4] = 'O';
         reportToSend[5] = 'O';
-        reportToSend[6] = 'T'; 
+        reportToSend[6] = 'T';
       }
     }
   }
   //
   // Lock out USB bootloader   format: {2, 'L','o','c','k','B','o','o','t','l','o','o','d'}
-  // 
+  //
   else if( cmd == 'L' && rId == 2 ) {
     char* bp = (char*) (&inbuf[2]);
     if( strncmp( bp, "ockBootload",11) == 0 ) {
@@ -1272,9 +1272,9 @@ static void handleMessage(uint8_t reportId)
     reportToSend[7] = (uint8_t)(now >> 0);
   }
   //
-  // Read User Note       format: { 1, 'f', noteid, 0, 0, 0, 0 }  
+  // Read User Note       format: { 1, 'f', noteid, 0, 0, 0, 0 }
   // NOTE: must be sent on reportId 2!
-  // 
+  //
   else if( cmd == 'f' && rId == 2 ) {  // read note
     uint8_t noteid = inbuf[2];
     noteRead( noteid ); // fills out reportToSend from RAM note
@@ -1289,7 +1289,7 @@ static void handleMessage(uint8_t reportId)
     doNotesWrite = true; // trigger save all notes
     // we write in main loop, not in this callback
   }
-  
+
 }
 
 /****************************************************************************
@@ -1306,14 +1306,14 @@ static void handleMessage(uint8_t reportId)
 static int ReportReceived(USB_Status_TypeDef status, uint32_t xferred, uint32_t remaining)
 {
   (void) remaining;
-  
+
   if ((status   == USB_STATUS_OK) &&
       (xferred  == REPORT_COUNT) ) {
     //      && (setReportFunc != NULL) ) {
     //setReportFunc( (uint8_t)tmpBuffer);
     handleMessage(REPORT_ID);
   }
-  
+
   return USB_STATUS_OK;
 }
 
@@ -1324,13 +1324,13 @@ static int Report2Received(USB_Status_TypeDef status, uint32_t xferred, uint32_t
 {
   (void) remaining;
   //(void) xferred;  (void) status;
-  
+
   if ((status   == USB_STATUS_OK) &&
       (xferred  == REPORT2_COUNT) ) {
     //GPIO_PinOutSet(gpioPortF, 4);
     handleMessage(REPORT2_ID);
   }
-  
+
   return USB_STATUS_OK;
 }
 
@@ -1344,7 +1344,7 @@ static int Report2Received(USB_Status_TypeDef status, uint32_t xferred, uint32_t
  *
  * @return USB_STATUS_OK if command accepted,
  *         USB_STATUS_REQ_UNHANDLED when command is unknown. In the latter case
- *         the USB device stack will handle the request. 
+ *         the USB device stack will handle the request.
  ****************************************************************************/
 int setupCmd(const USB_Setup_TypeDef *setup)
 {
@@ -1356,12 +1356,12 @@ int setupCmd(const USB_Setup_TypeDef *setup)
   if (  (setup->Type         == USB_SETUP_TYPE_STANDARD)
         && (setup->Direction == USB_SETUP_DIR_IN)
         && (setup->Recipient == USB_SETUP_RECIPIENT_INTERFACE)    ) {
-    
+
     /* A HID device must extend the standard GET_DESCRIPTOR command   */
     /* with support for HID descriptors.                              */
     switch (setup->bRequest) {
     case GET_DESCRIPTOR:
-      
+
       if ( (setup->wValue >> 8) == USB_HID_REPORT_DESCRIPTOR ) {
         USBD_Write(0, (void*)MyHIDReportDescriptor,
                    SL_MIN(sizeof(MyHIDReportDescriptor), setup->wLength),
@@ -1379,39 +1379,39 @@ int setupCmd(const USB_Setup_TypeDef *setup)
     }
   }
   else {
-    
+
     if ( (setup->Type         == USB_SETUP_TYPE_CLASS)
-         && (setup->Recipient == USB_SETUP_RECIPIENT_INTERFACE) ) { 
+         && (setup->Recipient == USB_SETUP_RECIPIENT_INTERFACE) ) {
       // && (setup->wIndex    == HIDKBD_INTERFACE_NO)    ) {
-      
-      // Implement the necessary HID class specific commands.           
+
+      // Implement the necessary HID class specific commands.
       switch ( setup->bRequest ) {
-        
+
       case USB_HID_SET_REPORT:           // 0x09, receive data from host
         /*
-          if ( ( (setup->wValue >> 8)      == 3)              // FEATURE report 
-          if ( ( (setup->wValue >> 8)      == 2)              // OUTPUT report 
-          && ( (setup->wValue & 0xFF) == 1)              // Report ID  
-          && (setup->wLength          == 1)              // Report length 
-          && (setup->Direction        != USB_SETUP_DIR_OUT)    ) { // 
+          if ( ( (setup->wValue >> 8)      == 3)              // FEATURE report
+          if ( ( (setup->wValue >> 8)      == 2)              // OUTPUT report
+          && ( (setup->wValue & 0xFF) == 1)              // Report ID
+          && (setup->wLength          == 1)              // Report length
+          && (setup->Direction        != USB_SETUP_DIR_OUT)    ) { //
         */
-        
-        if( (setup->wValue & 0xFF) == REPORT_ID ) { 
+
+        if( (setup->wValue & 0xFF) == REPORT_ID ) {
           USBD_Read(0, (void*)&inbuf, REPORT_COUNT, ReportReceived);
           retVal = USB_STATUS_OK;
         }
         else if( (setup->wValue & 0xFF) == REPORT2_ID ) {
           USBD_Read(0, (void*)&inbuf, REPORT2_COUNT, Report2Received);
-          retVal = USB_STATUS_OK;            
+          retVal = USB_STATUS_OK;
         }
-        
+
         break;
-        
+
       case USB_HID_GET_REPORT:           // 0x01, send data to host
           /*
-          if ( ( (setup->wValue >> 8)       == 1)             // INPUT report  
-               && ( (setup->wValue & 0xFF)  == 1)             // Report ID     
-               //               && (setup->wLength           == 8)             // Report length 
+          if ( ( (setup->wValue >> 8)       == 1)             // INPUT report
+               && ( (setup->wValue & 0xFF)  == 1)             // Report ID
+               //               && (setup->wLength           == 8)             // Report length
                //               && (setup->Direction         == USB_SETUP_DIR_IN)    ) {
                ) {
           */
@@ -1423,13 +1423,13 @@ int setupCmd(const USB_Setup_TypeDef *setup)
           USBD_Write(0, &reportToSend, REPORT2_COUNT, NULL);
           retVal = USB_STATUS_OK;
         }
-        
+
         break;
-          
+
       /*
       case USB_HID_SET_IDLE:
         // ********************
-          if ( ( (setup->wValue & 0xFF)    == 0)              // Report ID     
+          if ( ( (setup->wValue & 0xFF)    == 0)              // Report ID
              && (setup->wLength          == 0)
              && (setup->Direction        != USB_SETUP_DIR_IN)    ) {
           idleRate = setup->wValue >> 8;
@@ -1446,7 +1446,7 @@ int setupCmd(const USB_Setup_TypeDef *setup)
 
       case USB_HID_GET_IDLE:
         // ******************
-          if ( (setup->wValue       == 0)                     // Report ID     
+          if ( (setup->wValue       == 0)                     // Report ID
              && (setup->wLength   == 1)
              && (setup->Direction == USB_SETUP_DIR_IN)    ) {
           *(uint8_t*)&tmpBuffer = idleRate;
@@ -1456,12 +1456,12 @@ int setupCmd(const USB_Setup_TypeDef *setup)
         break;
           */
         } // swtich bRequest
-        
+
       } // if
 
   } // else
-  
-  
+
+
   return retVal;
 }
 
@@ -1489,6 +1489,3 @@ void stateChange(USBD_State_TypeDef oldState, USBD_State_TypeDef newState)
     //    GPIO_PinOutSet(gpioPortA, 0);
   }
 }
-
-
-
