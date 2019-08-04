@@ -4,7 +4,7 @@
 
 This is firmware for the blink(1) mk3 USB RGB LED device.
 It borrows heavily from the [Tomu](http://tomu.im) project.
-This directory is basically a fork of the
+This directory started as a fork of the
 [tomu-samples](https://github.com/im-tomu/tomu-samples) repository.
 
 ## How to use:
@@ -27,22 +27,20 @@ This directory is basically a fork of the
 2. Run `make deps .` to patch the linker with support for the blink(1) and Tomu
     and clone the [Gecko SDK](https://github.com/SiliconLabs/Gecko_SDK) locally
 
-3. Now you can build the examples
+3. Now you can build the firmware.
+
+4. The production firmware is located in `firmware-v30x`.
+
 
 ## Flashing:
 
-[outdated]
+The easiest way to upload a new firmware is to trigger the USB DFU bootloader
+and use `dfu-util` to upload the new firmware.  For an example of how to do this,
+see the "program-dfu" Makefile target in `firmware-v30x` or the "fw-updates" directory.
 
-Once you've compiled the code, you can flash the device using `minicom` on linux
-and OSX, or some other serial I/O utility on Windows. To do that, set it up with
-`115200 8n1`, then use `i` to show the bootloader version.
-
-To upload the binary, press `u`, wait till the bootloader replies with `Ready`,
-then press `^A-S`, choose XMODEM, choose the `.bin` file produced by the
-compilation, and wait until it's uploaded.
-
-Once that's done, press `b` to boot into the firmware. The bootloader will hang
-for 5-7 seconds, then the device will boot.
+You can also solder wires to the programming test pads:
+"5V" (+5VDC), "G" (gnd), "D" (SWD), "C" (SWC) pins
+then use any JTAG/SWD programmer to upload new code.
 
 
 ## Testing:
@@ -53,4 +51,3 @@ It is very good at detecting subtle errors in USB configuration that MacOS & Lin
 point out.
 
 On Mac OS X, install "USB Prober"
-
