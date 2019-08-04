@@ -88,6 +88,10 @@ clean:
 	@echo "Cleaning .o files..."
 	@rm -f *.o
 
+clean-gecko:
+	@echo "Cleaning Gecko .o files..."
+	@rm -f $(GECKO_OBJ)
+
 cleangecko:
 	@echo "Cleaning Gecko_SDK files..."
 	@find ../Gecko_SDK -type f -name \*.bin -delete
