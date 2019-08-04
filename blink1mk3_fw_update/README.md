@@ -15,10 +15,10 @@ The bundle works on MacOS or Windows.
 3. Unzip the bundle  ("Extract All" on Windows)
 
 4. Start the update:
-  - Windows: Double-click `blink1mk3-update-windows.bat`
-  - MacOS: Double-click `blink1mk3-update-macos.command`
+  - Windows: Double-click `blink1mk3-update-windows.bat` If you get a "Windows Protected You" pop-up, choose "More Info" and "Run anyway".
+  - MacOS: Command-click on `blink1mk3-update-macos.command` and choose "Open". You will have to authorize it to run.
 
 5. A Termainal/Command window will open.  You will see it tell the blink(1) to go into bootloader mode, then wait, then upload the new firmware.  
 During this process you will see the blink(1) flash alternating purple-pink to indicate bootloader mode, then it will go dark, then it will begin to flash red-green-blue until your OS re-recognizes the blink(1).
 
-6. Done! The firmware update is now complete. You can verify the firmware version by doing `blink1-tool --fwversion`.
+6. Done! The firmware update is now complete. Close the Terminal/Command window if it doesn't automatically close. You can verify the firmware version by doing `blink1-tool --fwversion`.
