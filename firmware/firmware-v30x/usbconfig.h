@@ -26,9 +26,26 @@ extern "C" {
 #define USB_CORECLK_HFRCO
 #define USB_USBC_32kHz_CLK USB_USBC_32kHz_CLK_LFRCO
 
+/*
+According to the docs, USB_PWRSAVE_MODE is undefined by default, 
+so no powersaving is performed.  However in practice, it appears
+if you set device to be Bus Powered it will halt the CPU when 
+a USB Suspend is done.
+
+// value for fw 302
 #define USB_PWRSAVE_MODE (USB_PWRSAVE_MODE_ONVBUSOFF   \
                           | USB_PWRSAVE_MODE_ONSUSPEND \
                           | USB_PWRSAVE_MODE_ENTEREM2 )
+//#define USB_PWRSAVE_MODE (USB_PWRSAVE_MODE_OFF)
+*/
+
+#if 0
+// FIXME: this did not seem to work
+extern int write_char(int p);
+#define USER_PUTCHAR  write_char
+// Debug USB API functions (illegal input parameters etc.) 
+#define DEBUG_USB_API
+#endif
 
 /****************************************************************************
 **                                                                         **
