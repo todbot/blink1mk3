@@ -8,7 +8,7 @@ echo Putting blink(1) into bootloader mode
 
 echo ------
 echo Waiting for bootloader USB reconnect...
-sleep 5
+timeout 5 > NUL
 
 echo ------
 echo Programming new firmware
@@ -16,4 +16,4 @@ echo Programming new firmware
 
 echo ------
 echo Done!
-sleep 2
+timeout 5 > NUL
