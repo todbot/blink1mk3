@@ -107,7 +107,7 @@
 #include <stdbool.h>
 
 #define blink1_version_major '3'
-#define blink1_version_minor '3'
+#define blink1_version_minor '4'
 
 #define DEBUG 0    // enable debug messages output via LEUART, see 'debug.h'
 #define DEBUG_STARTUP 0
@@ -165,7 +165,7 @@ enum {
     BOOT_OFF    = 2,  // turn off on startup, even with no USB
     BOOT_SERVERDOWN=3, // serverdown mode?  //just an idea, not implemented
 };
-
+    
 // layout of the startup params bundle
 // (v206+ stored a smaller startup params in last patternline)
 typedef struct {
@@ -341,8 +341,15 @@ bool shouldRebootToBootloader = false;
 bool doNotesWrite = false;
 // Set when USB is properly setup by host PC
 bool usbHasBeenSetup = false;
+
+// valid values for `startupState` (this was `doStartup` bool)
+enum {
+   STARTUP_BOOT  = 0,
+   STARTUP_CHECK = 1,
+   STARTUP_DONE  = 2,
+};
 // should powerup logic be done (must wait until chip & usb stabilize)
-bool doStartup = false;
+uint8_t startupState = STARTUP_BOOT;  // 0 = still booting, 1 = doing startup, 2 = startup done
 
 // For sending back HID Descriptor in setupCmd
 static void  *hidDescriptor = NULL;
@@ -705,10 +712,10 @@ static void updateMisc()
     //   if bootmode is BOOT_PLAY:    play()
     //   if bootmode is BOOT_NORMAL:  do_nothing(), but if !usb, play()
     //
-    if( now > 1000 ) { doStartup = true; }
-    if( doStartup ) {
-      doStartup = false;
-      dbg_printf("-doStartup:%ld-",now);
+    if( now > 1500 && startupState==STARTUP_BOOT ) { startupState = STARTUP_CHECK; }
+    if( startupState==STARTUP_CHECK ) {
+      startupState = STARTUP_DONE;
+      dbg_printf("-startupSt:%d:%ld-",startupState,now);
       uint8_t bmode = userData.startup_params.bootmode;
       if( bmode      == BOOT_OFF ) {
         dbg_str("BOOT_OFF\n");
@@ -730,7 +737,7 @@ static void updateMisc()
           }
         }
       }
-    } // doStartup
+    } // startupState==STARTUP_CHECK
 
   } // last_misc_millis
 
