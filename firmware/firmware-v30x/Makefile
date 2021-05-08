@@ -153,7 +153,7 @@ jlink: program-jlink
 program-jlink:
 #	echo "loadbin $(TARGET).bin,0x4000 \ngo\nexit\n" > jlink-tmp.txt
 	echo " power on \n halt \n loadbin $(TARGET).bin,0x4000 \n r \n power off \n exit \n" > jlink-tmp.txt
-	jlinkexe -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
+	jlinkexe -nogui 1 -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
 	rm jlink-tmp.txt
 
 program-openocd:
@@ -179,7 +179,7 @@ savefull:
 # program the entire memory contents from a file
 progfull:
 	echo " power on \n erase \n loadbin $(TARGET)-full.bin,0x0 \n go \n power off \n exit \n" > jlink-tmp.txt
-	jlinkexe -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
+	jlinkexe -nogui 1 -device EFM32HG309F64 -if swd -speed 4000 -autoconnect 1 -commanderscript jlink-tmp.txt
 	rm jlink-tmp.txt
 
 erase:
