@@ -162,13 +162,16 @@ program-openocd:
 # uses ThingM blink(1) DFU VID:PID
 # the '-' before a command means "continue even if it fails"
 dfu: program-dfu
-program-dfu:
+program-dfu: bin-to-dfu
 	-blink1-tool --gobootload && sleep 1.3
-	cp $(TARGET).bin $(TARGET).dfu
-	dfu-suffix -v 27B8 -p 01EE -a $(TARGET).dfu
 	echo "waiting for bootloader to come online"
 	-sleep 3
 	dfu-util -v --device 27B8:01EE --download $(TARGET).dfu
+
+bin-to-dfu:
+	@echo "converting $(TARGET).bin to $(TARGET).dfu"
+	cp $(TARGET).bin $(TARGET).dfu
+	dfu-suffix -v 27B8 -p 01EE -a $(TARGET).dfu
 
 # save the entire memory contents to a file
 savefull:
