@@ -871,6 +871,8 @@ int main()
   dbg_printf("before startup params. size:%d bootmode:%d\n", sizeof(userdata_t), userData.startup_params.bootmode );
   #endif
 
+  SpinDelay(100); // wait for flash copy to complete
+
   // load up variables
   //if( userData.startup_params.bootmode == BOOT_PLAY ) {
   dbg_str("loading startup params\n");
